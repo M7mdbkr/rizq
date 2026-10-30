@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+results/*.sqlite*
+results/_to_delete/
+results/skills_learned.json
+data/

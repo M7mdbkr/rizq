@@ -1,0 +1,32 @@
+{
+ "status": "escalated",
+ "findings_before": 1,
+ "auto_fixed": 0,
+ "escalated": [
+  {
+   "kind": "future_timestamp",
+   "entity": "ord_zjkx2gs",
+   "handling": "escalate",
+   "label": "unknown",
+   "detail": {
+    "created_at": "2026-10-30 20:37:00"
+   },
+   "human_action": "order dated in the future: check the device clock",
+   "human_action_ar": "طلب بتاريخ مستقبلي: تحقق من ساعة الجهاز"
+  }
+ ],
+ "diagnosis": {
+  "unknown": {
+   "count": 1,
+   "evidence": [
+    "future_timestamp:ord_zjkx2gs"
+   ]
+  }
+ },
+ "verification": {
+  "auto_findings_left": 0,
+  "new_findings": 0,
+  "passed": true
+ },
+ "plan": []
+}

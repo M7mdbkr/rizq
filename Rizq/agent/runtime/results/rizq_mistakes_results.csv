@@ -1,0 +1,11 @@
+id,mistake,mistake_ar,expected,runs,passed,status,first_failure
+RZ01,A line total does not equal price x quantity,إجمالي سطر لا يساوي السعر × الكمية,auto,20,20,PASS,
+RZ02,An item silently vanished from a paid order,صنف اختفى بصمت من طلب مدفوع,escalate,20,20,PASS,
+RZ03,"Order row lost, items + stock remain",الطلب انحذف وبقيت أصنافه والمخزون,escalate,20,20,PASS,
+RZ04,VAT wrong on an issued invoice,ضريبة غلط على فاتورة صادرة,escalate,20,20,PASS,
+RZ05,Charged total does not match the invoice,المبلغ المحصّل لا يطابق الفاتورة,escalate,20,20,PASS,
+RZ06,Sale did not deduct stock,بيع ما خصم من المخزون,auto,20,20,PASS,
+RZ07,Customer loyalty totals drifted,إجماليات العميل انحرفت,auto,20,20,PASS,
+RZ08,Unknown payment method on an order,طريقة دفع غير معروفة,escalate,20,20,PASS,
+RZ09,Order submitted twice (double tap),طلب انرسل مرتين,escalate,20,20,PASS,
+RZ10,Order dated in the future (device clock),طلب بتاريخ مستقبلي (ساعة الجهاز),escalate,20,20,PASS,

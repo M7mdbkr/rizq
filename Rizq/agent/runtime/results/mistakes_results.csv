@@ -1,0 +1,17 @@
+id,mistake,criterion,agent,runs,passed,pass_%,status,expected,false_recovery_claims,avg_detect_ticks,avg_recover_ticks,avg_actions,first_failure
+M01,Order is paid but never saved (no error in logs),1 Task Performance,rizq_agent,20,20,100.0,PASS,recovered,0,1.3,7.3,2.0,
+M02,Delivery-app orders vanish at rush hour,1 Task Performance,rizq_agent,20,20,100.0,PASS,recovered,0,1.9,7.8,2.0,
+M03,Cloud sync slowly writes wrong VAT,1 Task Performance,rizq_agent,20,20,100.0,PASS,recovered,0,1.6,7.7,4.0,
+M04,ZATCA receipt worker frozen while heartbeat says OK,1 Task Performance,rizq_agent,20,20,100.0,PASS,recovered,0,5.0,11.0,1.0,
+M05,Bot retries a rejected invoice forever,2 Robustness,rizq_agent,20,20,100.0,PASS,escalated,0,5.0,11.0,2.0,
+M06,Cashier price differs from HQ price list (never seen before),2 Robustness,rizq_agent,20,20,100.0,PASS,escalated,0,1.2,7.2,1.0,
+M07,Orders dropped AND queue losing messages at once,2 Robustness,rizq_agent,20,20,100.0,PASS,recovered,0,1.1,10.6,4.0,
+M08,Frozen worker hides a poison invoice,2 Robustness,rizq_agent,20,20,100.0,PASS,escalated,0,5.0,18.0,3.0,
+M09,Bad sync deploy plus unknown price change,2 Robustness,rizq_agent,20,20,100.0,PASS,escalated,0,1.1,11.2,5.5,
+M10,The usual fix does not work (restart does nothing),3 Evaluation & Iteration,rizq_agent,20,20,100.0,PASS,escalated,0,1.4,0.0,7.0,
+M11,Cloud check offline right after a sync deploy,2 Robustness,rizq_agent,20,20,100.0,PASS,escalated,0,0.0,0.0,1.0,
+M12,Normal rush hour (nothing is broken),4 Technical Judgment,rizq_agent,20,20,100.0,PASS,healthy,0,0.0,0.0,0.0,
+M13,Noisy logs: printer paper low + wifi drops (nothing broken),4 Technical Judgment,rizq_agent,20,20,100.0,PASS,healthy,0,0.0,0.0,0.0,
+M14,Orders dropped while logs are noisy and reworded,2 Robustness,rizq_agent,20,20,100.0,PASS,recovered,0,1.4,7.3,2.0,
+M15,Unannounced sync update while the cloud check is offline,4 Technical Judgment,rizq_agent,0,0,,SKIP,escalated,0,,,,needs the AI layer (run with --agent rizq_agent_ai)
+M16,Cloud check offline but nothing is wrong,2 Robustness,rizq_agent,0,0,,SKIP,healthy,0,,,,needs the AI layer (run with --agent rizq_agent_ai)

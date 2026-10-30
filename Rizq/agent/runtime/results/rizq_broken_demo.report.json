@@ -1,0 +1,115 @@
+{
+ "status": "escalated",
+ "findings_before": 7,
+ "auto_fixed": 2,
+ "escalated": [
+  {
+   "kind": "item_missing",
+   "entity": "ord_6sdbspn",
+   "handling": "escalate",
+   "label": "silent_drop",
+   "detail": {
+    "invoice_subtotal": 170,
+    "items_subtotal": 44.0,
+    "gap": 126.0
+   },
+   "human_action": "an item vanished from a paid order: check the kitchen ticket / receipt copy and re-add it",
+   "human_action_ar": "صنف اختفى من طلب مدفوع: راجع تذكرة المطبخ أو نسخة الفاتورة وأرجع الصنف"
+  },
+  {
+   "kind": "vat_wrong",
+   "entity": "ord_niojfbd",
+   "handling": "escalate",
+   "label": "data_corruption",
+   "detail": {
+    "net": 348.0,
+    "stored_vat": 62.2,
+    "correct_vat": 52.2,
+    "difference": 10.0
+   },
+   "human_action": "VAT on an issued invoice is wrong: issue a ZATCA credit/debit note for the difference",
+   "human_action_ar": "ضريبة القيمة المضافة غلط في فاتورة صادرة: أصدر إشعار دائن/مدين لزاتكا بالفرق"
+  },
+  {
+   "kind": "future_timestamp",
+   "entity": "ord_zjkx2gs",
+   "handling": "escalate",
+   "label": "unknown",
+   "detail": {
+    "created_at": "2026-10-30 20:37:00"
+   },
+   "human_action": "order dated in the future: check the device clock",
+   "human_action_ar": "طلب بتاريخ مستقبلي: تحقق من ساعة الجهاز"
+  },
+  {
+   "kind": "duplicate_order",
+   "entity": "ord_jvfcm9i_dup",
+   "handling": "escalate",
+   "label": "unknown",
+   "detail": {
+    "same_as": "ord_jvfcm9i",
+    "created_at": "2026-10-05 10:15:00",
+    "final_total": 34.5
+   },
+   "human_action": "two identical orders at the same moment: confirm with the cashier whether one is a double submit, then void it",
+   "human_action_ar": "طلبين متطابقين بنفس اللحظة: تأكد من الكاشير هل هو إرسال مكرر ثم ألغِ واحد"
+  },
+  {
+   "kind": "stock_movement_extra",
+   "entity": "prod_6fq22ce",
+   "handling": "escalate",
+   "label": "sync_desync",
+   "detail": {
+    "sold": 156,
+    "moved": 159,
+    "extra_qty": 3
+   },
+   "human_action": "stock was deducted without a sale: check for waste, staff meals or theft",
+   "human_action_ar": "انخصم مخزون بدون بيع: تحقق من الهدر أو وجبات الموظفين أو السرقة"
+  }
+ ],
+ "diagnosis": {
+  "silent_drop": {
+   "count": 1,
+   "evidence": [
+    "item_missing:ord_6sdbspn"
+   ]
+  },
+  "data_corruption": {
+   "count": 1,
+   "evidence": [
+    "vat_wrong:ord_niojfbd"
+   ]
+  },
+  "unknown": {
+   "count": 2,
+   "evidence": [
+    "future_timestamp:ord_zjkx2gs",
+    "duplicate_order:ord_jvfcm9i_dup"
+   ]
+  },
+  "sync_desync": {
+   "count": 2,
+   "evidence": [
+    "stock_movement_missing:prod_0clc3sy",
+    "stock_movement_extra:prod_6fq22ce"
+   ]
+  },
+  "ledger_drift": {
+   "count": 1,
+   "evidence": [
+    "customer_drift:0593520868"
+   ]
+  }
+ },
+ "verification": {
+  "auto_findings_left": 0,
+  "new_findings": 0,
+  "passed": true
+ },
+ "plan": [
+  "-- restore 1 missing sale movement(s)\nINSERT INTO stock_transactions (id, product_id, transaction_type, quantity, notes) VALUES (?,?, 'sale', ?, ?);  -- params=[\"st_rizq_agent_1\", \"prod_0clc3sy\", -1, \"Rizq Agent: missing sale movement restored\"]",
+  "-- deduct 1 from stock\nUPDATE products SET stock = stock - ? WHERE id=?;  -- params=[1, \"prod_0clc3sy\"]",
+  "-- recompute customer totals from orders\nUPDATE customers SET orders_count=?, total_spent=? WHERE phone=?;  -- params=[1, 77.63, \"0593520868\"]"
+ ]
+}

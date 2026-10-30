@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111714">
+  <title>رزق | مركز التشغيل الذكي</title>
+  <link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brandmark">ر</span><span><b>رزق</b><small>مركز التشغيل الذكي</small></span></a>
+    <div class="top-actions"><span id="live-pill" class="pill"><i></i> جاري الفحص</span><a class="button secondary" href="/pos/" target="_blank" rel="noopener">فتح نظام الكاشير ↗</a></div>
+  </header>
+  <main>
+    <section class="welcome">
+      <div><p class="eyebrow">RIZQ · AI OPERATIONS</p><h1>شغّل مطعمك <em>بوضوح</em></h1><p class="sub">اسأل وكيل رزق عن المبيعات والمخزون، افحص البيانات، وخذ قرارات آمنة بمساعدته.</p></div>
+      <div class="welcome-mark">رزق<span>✳</span></div>
+    </section>
+    <section class="status-grid">
+      <article class="status-card"><span class="label">قاعدة البيانات</span><strong id="db-status">جارٍ الاتصال...</strong><small id="db-detail">نقرأ قاعدة العرض التجريبية</small></article>
+      <article class="status-card"><span class="label">نموذج الذكاء</span><strong id="llm-status">جارٍ الفحص...</strong><small id="llm-detail">المزوّد يتحدد من القائمة</small></article>
+      <article class="status-card"><span class="label">المهارات المتاحة</span><strong id="skill-count">—</strong><small>أجوبة مدقّقة من بيانات رزق</small></article>
+    </section>
+    <div class="layout">
+      <section class="panel chat-panel">
+        <div class="panel-head"><div><p class="eyebrow">RIZQ AGENT</p><h2>مساعدك الذكي</h2></div><span class="safe-label">الأصل للقراءة فقط</span></div>
+        <div id="messages" class="messages" aria-live="polite"><div class="bubble assistant"><b>هلا بك 👋</b><p>اسألني عن مبيعاتك، الضريبة، المخزون أو أي مشكلة في بيانات رزق. سأستخدم قاعدة بياناتك وأوضح لك مصدر الإجابة.</p></div></div>
+        <div class="composer-tools"><label>مزود النموذج<select id="provider"><option value="auto">تلقائي</option><option value="ollama">Ollama محلي</option><option value="claude">Claude</option><option value="openai">OpenAI</option><option value="compatible">OpenAI-compatible endpoint</option><option value="rules">بدون نموذج</option></select></label><label>اسم النموذج <input id="model" placeholder="اتركه تلقائيًا"></label></div>
+        <label class="approve"><input id="approve" type="checkbox"> أوافق لهذه الرسالة على إصلاح البيانات المشتقة في نسخة عمل</label>
+        <form id="chat-form" class="composer"><textarea id="question" rows="2" placeholder="مثال: كم مبيعاتي آخر 7 أيام؟" required></textarea><button class="send" type="submit" aria-label="إرسال">↑</button></form>
+        <p class="fineprint">إصلاحات الفواتير والمبالغ لا تتم آليًا. مفاتيح المزوّد تبقى على هذا الجهاز داخل ملف الإعدادات.</p>
+      </section>
+      <aside class="side-stack">
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">DATA LINK</p><h2>اربط بيانات الكاشير</h2></div><span class="icon">↔</span></div>
+          <p class="body-copy">افتح نظام الكاشير من هذا المركز مرة واحدة، ثم ارجع واضغط ربط. تُنقل قاعدة SQLite من المتصفح إلى ذاكرة مؤقتة محلية حتى إيقاف الخادم.</p>
+          <div class="button-row"><a class="button secondary" href="/pos/" target="_blank" rel="noopener">افتح الكاشير</a><button id="connect-db" class="button primary">ربط قاعدة هذا المتصفح</button></div>
+          <button id="reset-db" class="text-button">الرجوع لقاعدة العرض التجريبية</button>
+        </section>
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">BUSINESS CHECK</p><h2>فحص سلامة البيانات</h2></div><span class="icon">✓</span></div>
+          <p class="body-copy">افحص الإجماليات والضريبة والمخزون والعملاء. الإصلاحات المشتقة تبقى على نسخة عمل.</p>
+          <button id="scan" class="button primary full">ابدأ الفحص</button><div id="scan-results" class="scan-results"><span class="muted">لم يبدأ الفحص بعد</span></div>
+        </section>
+        <section class="panel skill-panel"><div class="panel-head"><div><p class="eyebrow">VERIFIED SKILLS</p><h2>مهارات الوكيل</h2></div></div><div id="skills" class="skills"><span class="muted">تحميل المهارات...</span></div></section>
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">TAX & ZAKAT</p><h2>الضريبة والزكاة</h2></div><span id="zatca-badge" class="tag warn">محلي</span></div>
+          <p id="zatca-note" class="body-copy">جارٍ فحص حالة التكامل...</p><button id="vat-report" class="button secondary full">عرض ضريبة الشهر</button><div id="vat-result" class="scan-results"></div>
+        </section>
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">FEATURE BACKLOG</p><h2>ميزات مؤجلة للوكيل</h2></div></div><p class="body-copy">الوكيل يقدر يبني مهارات تقارير آمنة عند طلبها. الميزات التشغيلية تبقى موقوفة حتى مراجعتها واعتمادها.</p><div id="features" class="feature-list"><span class="muted">تحميل قائمة الميزات...</span></div></section>
+        <section class="panel"><div class="panel-head"><div><p class="eyebrow">KNOWN ISSUES</p><h2>سجل المشكلات</h2></div></div><div id="problems" class="problem-list"><span class="muted">تحميل سجل المشكلات...</span></div></section>
+      </aside>
+    </div>
+    <footer>رزق · مساعد تشغيل محلي · <span id="server-address"></span></footer>
+  </main>
+  <script src="/web/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "project": "Rizq",
+  "problems": [
+    {"id":"BUG-1","title":"فشل دفع مدى بصمت عند التثبيت الجديد","severity":"high","status":"known_unfixed_in_pos_bundle","repro":"قاعدة متصفح جديدة > إضافة صنف > اختيار مدى > تأكيد الطلب","expected":"حفظ الطلب أو إظهار خطأ مفهوم","agent_can_detect":"no; dropped checkout is absent from the database","agent_can_fix":"no; requires Rizq source and terminal settlement comparison"},
+    {"id":"BUG-2","title":"بيانات العرض تنشئ أوقات طلبات مستقبلية","severity":"low","status":"detected_by_agent","repro":"تشغيل فحص قاعدة Rizq التجريبية","expected":"رفض أي timestamp بعد الوقت الحالي","agent_can_detect":"yes","agent_can_fix":"no; investigate device clock or seeder"},
+    {"id":"P-4","title":"رموز دخول المستخدمين مخزنة كنص صريح في نسخة POS الحالية","severity":"high","status":"known_unfixed_in_pos_bundle","repro":"مراجعة جدول users في قاعدة الاختبار","expected":"تخزين salted hash بدل PIN مقروء","agent_can_detect":"not enabled in scan","agent_can_fix":"no; requires Rizq source and reviewed migration"},
+    {"id":"P-6","title":"جدول daily_ledger فارغ في fixture الحالي","severity":"medium","status":"known","repro":"استعلام daily_ledger على fixture","expected":"مطابقة إجماليات الطلبات المكتملة حسب اليوم","agent_can_detect":"not enabled in scan","agent_can_fix":"no; ledger write needs reviewed workflow"}
+  ]
+}

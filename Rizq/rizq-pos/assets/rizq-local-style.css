@@ -1,0 +1,8 @@
+@font-face{font-family:RizqArabic;src:url('/assets/fonts/Tajawal-Regular.ttf') format('truetype');font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:RizqArabic;src:url('/assets/fonts/Tajawal-Bold.ttf') format('truetype');font-style:normal;font-weight:700;font-display:swap}
+body,body *:not(svg):not(path){font-family:RizqArabic,system-ui,sans-serif!important}
+.rizq-origin-mark{position:static;width:max-content;margin:20px auto 12px;display:flex;gap:7px;align-items:center;padding:5px 9px;border:1px solid rgba(214,185,109,.22);border-radius:10px;background:rgba(21,24,21,.9);color:#d9c38c;pointer-events:none;direction:rtl}
+.rizq-origin-mark svg{width:17px;height:17px;color:#79aa82;flex:none}
+.rizq-origin-mark strong{display:block;font-size:10px;line-height:1.1;font-weight:700}
+.rizq-origin-mark small{display:block;margin-top:2px;font-size:8px;line-height:1;letter-spacing:.04em;direction:ltr}
+@media print{.rizq-origin-mark{display:none}}

@@ -1,0 +1,11 @@
+{
+  "project": "Rizq",
+  "policy": "Features marked parked stay off until explicitly enabled. The agent may build verified read-only report skills; production workflows require human review.",
+  "features": [
+    {"id":"daily_close","name_ar":"إقفال اليوم ومطابقة الدفتر","status":"parked","enabled":false,"agent_buildable":"partly","note":"Prototype summaries can be built as read-only skills; writing daily_ledger needs reviewed implementation."},
+    {"id":"low_stock_restock","name_ar":"اقتراح إعادة طلب المخزون","status":"parked","enabled":false,"agent_buildable":"partly","note":"Read-only recommendations only; purchasing remains human-approved."},
+    {"id":"zatca_fatoora","name_ar":"تكامل الفوترة مع FATOORA","status":"parked","enabled":false,"agent_buildable":"no","note":"Needs compliant EGS, taxpayer onboarding, CSID, and official sandbox/production verification."},
+    {"id":"whatsapp_orders","name_ar":"طلبات واتساب","status":"parked","enabled":false,"agent_buildable":"no","note":"Needs an approved WhatsApp Business provider and order-confirmation workflow."},
+    {"id":"multi_branch_sync","name_ar":"مزامنة الفروع","status":"parked","enabled":false,"agent_buildable":"no","note":"Needs a reviewed server sync and conflict-resolution design."}
+  ]
+}
