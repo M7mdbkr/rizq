@@ -182,8 +182,28 @@ Two real defects were found by writing them:
 Also: the export now ships `templates/monthly-report.txt`, closing the round trip the owner
 asked for — export the file, hand it back, get it filled from the database.
 
+### C-6. Confidence gate and scheduler, 31 Oct 2026
+- **The assistant answered in JSON.** `- مبيعات فترة: {"days":1,"orders":16,...}` — right
+  numbers, unusable reply. `phrase.py` turns a verified skill result into an Arabic sentence;
+  it computes nothing, so a phrasing bug cannot invent a figure.
+- **Running the tests signed out every real user.** `reset_for_tests()` deleted from whatever
+  SESSION_DB pointed at and two test files never redirected it, so the live store was wiped on
+  every suite run — which is exactly why the agent kept "breaking" right after being reported
+  working. Guarded, with a canary test.
+- **`confidence.py`**: a score per answer from checkable signals only (checker agreement,
+  capability match, whose parameters, sample size, tool grounding). Never asks the model how
+  confident it is. Below 95 it escalates to a bigger local model, then to a human. Two scoring
+  bugs were found and fixed while building it: `value.get("orders") or ...` treated a
+  legitimate 0 as missing and hid the empty-period case entirely, and a count that IS the
+  answer (low_stock = 4 items) was being penalised as a small sample.
+- **`schedule.py`**: durable jobs with the fixed Saudi occasions (National Day 23 Sep,
+  Founding Day 22 Feb). A discount is prepared the day before, repeats yearly, and is queued
+  for the owner to apply in the till — money never moves on a timer. Hijri dates are not
+  computed, because guessing the day of Eid is worse than asking.
+- **`SOLUTIONS.md`**: nine real problems with the test that proves each.
+
 ### D. Where things stand / what is in progress
-- Tests: **231/231 pass** (31 Oct, ~13:45), including 26 end-to-end scenario tests. Earlier counts (99, 109, 147, 183, 205) are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
+- Tests: **267/267 pass** (31 Oct, ~15:00), including 26 scenario tests, the confidence gate and the scheduler. Earlier counts are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.
 
 ### E. Next steps (in order)

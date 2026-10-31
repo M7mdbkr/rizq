@@ -4,13 +4,17 @@
 
 # رزق · Rizq
 
+**Rizq Agent: The POS That Builds Its Own Features**
+
+*HUMAIN Future AI Builders Hackathon · Challenge 3 — Autonomous Enterprise*
+
 **An offline-first restaurant point-of-sale — with an AI agent that answers questions about
 your own data, repairs it when it breaks, and fixes its own code.**
 
 Arabic-first · runs on your machine · free local models · no cloud, no subscription
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-d4af37.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-231%20passing-79aa82.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-234%20passing-79aa82.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3b82f6.svg)](#requirements)
 [![Model cost](https://img.shields.io/badge/model%20cost-0%20SAR-79aa82.svg)](#the-ai-agent)
 [![Security](https://img.shields.io/badge/security-audited-79aa82.svg)](SECURITY.md)
@@ -42,6 +46,20 @@ problem in their own dialect, and the agent does one of four things — and says
 | **Refuses / escalates** | money on an issued tax invoice, deletions, secrets, prompt injection — refused *before the model is ever called*. |
 
 ---
+
+## Why it is different
+
+- **Works offline.** SQLite runs inside the browser: no server, no internet needed to sell.
+- **A free, local AI agent.** Rules-first, with a local model (Qwen3 via Ollama) only where rules run out. No API key, no per-question cost, the data stays in the restaurant.
+- **Any LLM can be plugged in.** Put an Anthropic key in `agent/runtime/.env` and the same agent uses it instead.
+- **It builds its own features.** A missing capability becomes a read-only skill that two different queries must agree on, installed only after the owner says yes.
+- **Safety lives in the tools, not the prompt.** Read-only SQL, repair on a copy, deny-by-default roles, an append-only audit log.
+- **Honest evaluation.** Held-out sets run once at freeze, ablations, and the misses published.
+
+---
+
+> **Nine real problems this solves, with the test that proves each one:**
+> [SOLUTIONS.md](SOLUTIONS.md)
 
 ## Five situations it is built for
 
@@ -209,6 +227,28 @@ the POS refuses a duplicate when you add or change it, and the server refuses to
 ambiguous PIN rather than guessing which person is signing in — otherwise a shift, a repair
 and every audit entry would be attributed to the wrong human.
 
+### It tells you how much to trust it
+
+Every answer carries a score built from signals that can be checked — did an independent
+checker agree, was the question matched to a real capability, were the parameters yours,
+is there enough data behind the figure. **It never asks the model how confident it is**,
+because models are badly calibrated about their own correctness.
+
+Below 95% the answer is not presented as fact. It escalates to a larger local model, and if
+that still does not clear the bar, to you — with the reason:
+
+> ⚠️ ثقتي في هذه الإجابة 40% فقط — ما فيه أي طلبات في هذه الفترة.
+
+### It remembers the dates you forget
+
+```
+خصم اليوم الوطني السعودي 20% · يُجهَّز 22 سبتمبر · يتكرر كل سنة
+```
+
+Scheduled once, prepared the day before, repeating yearly. The discount is **queued for you
+to apply in the till** — money never moves on a timer alone. Hijri occasions are scheduled
+by explicit date rather than guessed, because a wrong Eid date is worse than a question.
+
 ### It can fix its own code
 
 Point it at a file and describe the problem; it writes a targeted edit, which is applied
@@ -234,7 +274,7 @@ cd agent/runtime && python3 -m rizq_agent.code_agent
 
 ```bash
 cd agent/runtime
-python3 -m unittest discover -s tests          # 231 tests
+python3 -m unittest discover -s tests          # 234 tests
 python3 -m unittest tests.test_scenarios       # the five situations above
 python3 -m rizq_agent requests --split dev   # owner-request evaluation
 python3 -m rizq_agent rizq eval --split dev  # planted faults on the real database
@@ -262,7 +302,7 @@ set destroys its value.
 rizq-pos/            the cashier app (compiled bundle, served at /pos/)
 agent/runtime/
   rizq_agent/        the agent: skills, triage, scan/repair, roles, code changes
-  tests/             165 tests
+  tests/             234 tests
   fixtures/          real exported databases used by the evaluations
   eval/              owner-request sets (dev + held-out)
   tools/pos_patches/ re-runnable, reversible patches to the compiled bundle
@@ -290,6 +330,24 @@ Rizq.md              the full engineering record: decisions, results, known prob
 
 ---
 
+## Future work
+
+**Next (the known misses):**
+- Arabic text normalisation (hamza forms, article and prefix variants), then a **new** held-out set to re-test, since the current one is spent.
+- A dialect-and-typo robustness suite, run with an external model and cached for replay.
+
+**Then (from the challenge list in `agent/runtime/problems/challenges.json`):**
+- ZATCA FATOORA e-invoicing onboarding (CH-01).
+- A day-end reconciliation agent for cash, card, invoices and the ledger (CH-03).
+- Low-stock forecasting and replenishment advice (CH-07).
+- A shared server database with automated backups, tested restores and write-back to the cashier (CH-04).
+- Multi-branch offline synchronisation (CH-08).
+- Hashed PINs and multi-factor sign-in in the cashier source; persistent agent memory.
+
+**Product roadmap:** local app (built) → Telegram bot → WhatsApp orders → cloud SaaS.
+
+---
+
 ## Security
 
 Authentication is server-side, roles are deny-by-default, owners can enable TOTP two-factor,
@@ -302,3 +360,5 @@ including the three things that are **not** done — is in [SECURITY.md](SECURIT
 are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Built by **Mohammed Bakr** — Computer Engineering, Taif University.
+
+**Disclosure:** built with an AI coding assistant (Anthropic Claude). The local model is Qwen3 via Ollama (Apache 2.0). Data: real Rizq exports and hand-written requests; no data is generated by a model.

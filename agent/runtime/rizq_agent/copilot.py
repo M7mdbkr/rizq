@@ -25,7 +25,7 @@ import urllib.request
 from collections import Counter
 from dataclasses import asdict
 
-from . import export, fill, permissions, phrase, rizq, skills, triage
+from . import confidence, export, fill, permissions, phrase, rizq, schedule, skills, triage
 from .llm import _load_key
 
 MAX_STEPS = 10
@@ -84,6 +84,12 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
     {"name": "export_data", "description": "Export every table, the audit log, the chat history and the current integrity findings as one ZIP file for an accountant or auditor. Employee PINs are redacted.",
      "input_schema": {"type": "object", "properties": {}}},
+    {"name": "list_schedule", "description": "List the scheduled tasks and the actions waiting for the owner to apply in the till.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "schedule_occasion_discount", "description": "Schedule a discount for a Saudi occasion (national_day, founding_day), prepared a chosen number of days before and repeating every year. The discount is queued for the owner to apply in the till; it is never applied automatically.",
+     "input_schema": {"type": "object", "properties": {"occasion": {"type": "string"}, "percent": {"type": "number"},
+                                                       "code": {"type": "string"}, "days_before": {"type": "integer", "default": 1}},
+                      "required": ["occasion", "percent", "code"]}},
     {"name": "save_fixed_copy", "description": "Save the repaired working copy as a NEW file next to the results (the original is never overwritten).",
      "input_schema": {"type": "object", "properties": {}}},
 ]
@@ -106,6 +112,7 @@ class PosTools:
         self.escalations: list[dict] = []
         self.log: list[dict] = []
         self.outputs: list[tuple] = []
+        self.last_verdict = None
 
     def _record(self, name: str, args: dict, out: dict) -> dict:
         self.log.append({"tool": name, "args": args, "ok": "error" not in out})
@@ -219,8 +226,16 @@ class PosTools:
 
     def t_run_skill(self, name: str, params: dict | None = None) -> dict:
         if name in skills.load_learned(self.learned_path):
-            return skills.run_learned(self.db, self.learned_path, name)
-        return skills.run(self.db, name, params or {})
+            out = skills.run_learned(self.db, self.learned_path, name)
+            # A learned skill was verified when it was built, not necessarily now.
+            self.last_verdict = confidence.score_skill(out, matched_exactly=True)
+            self.last_verdict.score = min(self.last_verdict.score, 92.0)
+            self.last_verdict.penalties.append("مهارة متعلّمة، تحققت وقت إنشائها")
+            return out
+        out = skills.run(self.db, name, params or {})
+        self.last_verdict = confidence.score_skill(
+            out, matched_exactly=True, owner_params=params or {})
+        return out
 
     def t_build_skill(self, name: str, description: str, sql: str, check_sql: str) -> dict:
         return skills.build_learned_skill(self.db, self.learned_path, name, description, sql, check_sql, self.confirm)
@@ -268,6 +283,20 @@ class PosTools:
                 "contains": "every table as CSV, a redacted database copy, the audit log, "
                             "chat history, escalations and the integrity report",
                 "pins_redacted": True}
+
+    def t_list_schedule(self) -> dict:
+        return {"jobs": schedule.jobs(), "waiting_for_you": schedule.pending(),
+                "occasions": {k: v["name_ar"] for k, v in schedule.OCCASIONS.items()},
+                "note": "الخصومات تُجهَّز في موعدها وتُطبَّق بموافقتك من الكاشير"}
+
+    def t_schedule_occasion_discount(self, occasion: str, percent: float, code: str,
+                                     days_before: int = 1) -> dict:
+        who = (self.actor or {}).get("user_id", "local")
+        job = schedule.schedule_occasion_discount(occasion, float(percent), str(code),
+                                                  who, int(days_before))
+        return {"scheduled": job["name"], "first_run": job["next_run"],
+                "repeats": "every year",
+                "note": "يُجهَّز في موعده وينتظر موافقتك قبل التفعيل"}
 
     def t_save_fixed_copy(self) -> dict:
         os.makedirs(self.out_dir, exist_ok=True)
@@ -450,6 +479,10 @@ class RulesBrain:
                         lines.append(f"  • {f['kind']} {f['entity']}: {f['action_en']}")
             elif c["name"] == "run_skill":
                 lines.append(_skill_line_impl(out, ar))
+                verdict = confidence.score_skill(
+                    out, matched_exactly=True, owner_params=c["input"].get("params") or {})
+                if ar and verdict.note_ar():
+                    lines.append(verdict.note_ar())
             elif c["name"] == "apply_fixes":
                 lines.append(f"- apply_fixes: {json.dumps(out, ensure_ascii=False)[:300]}")
             elif c["name"] == "get_order":

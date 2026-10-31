@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from . import code_agent, copilot, export, fill, memory, permissions, rizq, security, skills, triage, zatca
+from . import code_agent, confidence, copilot, export, fill, memory, permissions, rizq, schedule, security, skills, triage, zatca
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -217,6 +217,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"fields": fill.available_fields(),
                             "syntax": "{{field}} or {{field:days=30}}"})
             return
+        if path == "/api/schedule":
+            self.actor(require_owner=True)
+            self.send_json({"jobs": schedule.jobs(), "waiting_for_you": schedule.pending(),
+                            "occasions": {k: v["name_ar"] for k, v in schedule.OCCASIONS.items()}})
+            return
+        if path == "/api/schedule/run-due":
+            actor = self.actor(require_owner=True)
+            db = rizq.open_copy(str(ACTIVE_DB))
+            try:
+                ran = schedule.run_due(db)
+            finally:
+                db.close()
+            if ran:
+                permissions.audit(actor, "schedule.run_due", allowed=True, detail={"jobs": len(ran)})
+            self.send_json({"ran": ran})
+            return
         if path == "/api/scan":
             try:
                 self.actor(require_owner=True)
@@ -340,6 +356,25 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/audit":
                 actor = self.actor(body, require_owner=True)
                 self.send_json({"entries": permissions.read_audit(int(body.get("limit", 50)))})
+                return
+            if path == "/api/schedule/discount":
+                actor = self.actor(body, require_owner=True)
+                job = schedule.schedule_occasion_discount(
+                    str(body.get("occasion", "")), float(body.get("percent", 0)),
+                    str(body.get("code", "")), actor["user_id"], int(body.get("days_before", 1)))
+                permissions.audit(actor, "schedule.discount", allowed=True, detail=job["params"])
+                self.send_json(job)
+                return
+            if path == "/api/schedule/apply":
+                actor = self.actor(body, require_owner=True)
+                ok = schedule.mark_applied(str(body.get("action_id", "")), actor["user_id"])
+                permissions.audit(actor, "schedule.apply", allowed=ok,
+                                  detail={"action_id": body.get("action_id")})
+                self.send_json({"ok": ok})
+                return
+            if path == "/api/schedule/remove":
+                actor = self.actor(body, require_owner=True)
+                self.send_json({"ok": schedule.remove(str(body.get("job_id", "")))})
                 return
             if path == "/api/fill":
                 self.guard("fill")
@@ -471,9 +506,11 @@ class Handler(BaseHTTPRequestHandler):
                     if not needs_model:
                         answer = copilot.ask(copilot.RulesBrain(), tools, message,
                                              on_event=lambda _: None)
+                        verdict = tools.last_verdict
                         memory.append_exchange(user_id, message, answer)
                         self.send_json({"session": sid, "answer": answer, "provider": "rules",
-                                        "model": "", "actions": tools.log[-10:]})
+                                        "model": "", "actions": tools.log[-10:],
+                                        "confidence": verdict.as_dict() if verdict else None})
                         return
                     with LOCAL_SESSIONS_LOCK:
                         state = LOCAL_SESSIONS.get(sid)
@@ -489,9 +526,32 @@ class Handler(BaseHTTPRequestHandler):
                             LOCAL_SESSIONS[sid] = state
                     with state["lock"]:
                         answer = copilot.ask(state["brain"], tools, message, on_event=lambda _: None)
-                        memory.append_exchange(user_id, message, answer)
+                    used = getattr(state["brain"], "model", "")
+                    verdict = confidence.score_model_answer(answer, tools.log)
+                    escalated_to = None
+                    if not verdict.approved:
+                        # Not good enough to present as fact. Try a larger model once
+                        # before giving up; the owner asked for exactly this ladder.
+                        bigger = confidence.bigger_model(used, confidence.installed_models())
+                        if bigger:
+                            try:
+                                # Same tools, so the retry reads the same snapshot under
+                                # the same role; only the model changes.
+                                brain2 = copilot.pick_brain("ollama", bigger)
+                                before = len(tools.log)
+                                answer2 = copilot.ask(brain2, tools, message, on_event=lambda _: None)
+                                v2 = confidence.score_model_answer(answer2, tools.log[before:])
+                                if v2.score > verdict.score:
+                                    answer, verdict, escalated_to = answer2, v2, bigger
+                            except Exception:
+                                pass                      # keep the first answer
+                    if not verdict.approved:
+                        answer = (answer or "").rstrip() + "\n" + verdict.note_ar()
+                    memory.append_exchange(user_id, message, answer)
                     self.send_json({"session": sid, "answer": answer, "provider": "ollama",
-                                    "model": getattr(state["brain"], "model", ""),
+                                    "model": escalated_to or used,
+                                    "confidence": verdict.as_dict(),
+                                    "escalated_to": escalated_to,
                                     "actions": tools.log[-10:]})
                 finally:
                     tools.db.close()

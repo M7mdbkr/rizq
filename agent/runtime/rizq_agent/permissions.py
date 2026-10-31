@@ -57,11 +57,14 @@ TOOL_MIN_ROLE = {
     "list_fill_fields": "owner",
     "fill_template": "owner",
     "export_data": "owner",
+    "list_schedule": "owner",
+    "schedule_occasion_discount": "owner",
 }
 
 # Tools that change or export data. Allowed only for the owner AND only when the
 # session was opened with a PIN in this process (never on a role guessed by a client).
-WRITE_TOOLS = {"apply_fixes", "build_skill", "save_fixed_copy", "export_data"}
+WRITE_TOOLS = {"apply_fixes", "build_skill", "save_fixed_copy", "export_data",
+               "schedule_occasion_discount"}
 
 TOKEN_TTL_SECONDS = 12 * 60 * 60      # absolute lifetime
 TOKEN_IDLE_SECONDS = 60 * 60          # idle timeout
