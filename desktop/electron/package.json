@@ -1,0 +1,9 @@
+{
+  "name": "rizq-desktop",
+  "productName": "Rizq",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {"start": "electron ."},
+  "devDependencies": {"electron": "40.2.1"}
+}

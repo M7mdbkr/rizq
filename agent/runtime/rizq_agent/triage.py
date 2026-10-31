@@ -23,7 +23,7 @@ ACTIONS = (ANSWER, REPAIR, BUILD, ESCALATE, REFUSE)
 
 _DESTRUCTIVE = r"\b(delete|remove|drop|truncate|wipe|erase)\b|احذف|امسح|مسح|شيل|ازل|أزل|امحي"
 _INJECTION = r"ignore (your|all|previous|the)|admin mode|jailbreak|developer mode|تجاهل|تخطى القواعد"
-_SECRETS = r"\bpins?\b|password|passcode|token|api key|رقم سري|الرقم السري|الرموز السرية|باسوورد|كلمة السر|كلمة المرور"
+_SECRETS = r"\bpins?\b|password|passcode|token|api key|رقم سري|الرقم السري|الرموز السرية|[اأ]رقام ?(ال)?سري|رمز ?(ال)?سري|باسوورد|باسورد|كلمة السر|كلمة المرور"
 _EDIT_VALUE = (r"(set|change|make|edit|عدّل|عدل|غير|غيّر|خل|خلّ).{0,45}"
                r"(price|total|vat|amount|سعر|مجموع|ضريب|مبلغ)")
 _EDIT_TO = r"\bto\s*\d|الى\s*\d|إلى\s*\d|صفر|مجان|\bfree\b|\bzero\b"

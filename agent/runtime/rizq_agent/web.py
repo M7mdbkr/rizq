@@ -11,14 +11,18 @@ import sqlite3
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from . import code_agent, confidence, copilot, export, fill, memory, permissions, rizq, schedule, security, skills, triage, zatca
+from .reply import language as reply_lang
+from . import code_agent, confidence, copilot, export, fill, importer, memory, models, payments, permissions, rizq, schedule, security, skills, triage, zatca
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(os.environ.get("RIZQ_ASSET_RUNTIME", str(pathlib.Path(__file__).resolve().parents[1])))
 WEB = ROOT / "web"
 POS = ROOT.parent.parent / "rizq-pos"
+RESULTS = pathlib.Path(os.environ.get("RIZQ_RESULTS_DIR", str(ROOT / "results")))
 DEFAULT_DB = ROOT / "fixtures" / "rizq_dev.sqlite"
 ACTIVE_DB = pathlib.Path(os.environ.get("RIZQ_DB", str(DEFAULT_DB))).resolve()
 DB_TEMP: str | None = None
@@ -28,6 +32,139 @@ LOCAL_SESSIONS_LOCK = threading.Lock()
 MAX_BODY = 30 * 1024 * 1024
 CODE_LOCK = threading.Lock()
 CODE_FAILURES: dict[str, list[float]] = {}
+# The key is deliberately held only in the running server, never returned or written to disk.
+AI_SETTINGS = {"provider": "auto", "model": "", "key": "", "version": 0}
+AI_SETTINGS_LOCK = threading.Lock()
+# Saved on this device only (0600, outside git) so a restart keeps the owner's choice.
+# The key is sent to nobody except the provider the owner picked.
+AI_SETTINGS_FILE = pathlib.Path(os.environ.get("RIZQ_AI_SETTINGS_FILE", str(
+    pathlib.Path(os.environ.get("RIZQ_DATA_DIR", str(ROOT / "data"))) / "ai_settings.json")))
+
+
+def save_ai_settings() -> None:
+    with AI_SETTINGS_LOCK:
+        data = {k: AI_SETTINGS[k] for k in ("provider", "model", "key")}
+    AI_SETTINGS_FILE.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    tmp = AI_SETTINGS_FILE.with_name(AI_SETTINGS_FILE.name + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(data, fh)
+    os.replace(tmp, AI_SETTINGS_FILE)
+    os.chmod(AI_SETTINGS_FILE, 0o600)
+
+
+def load_ai_settings() -> bool:
+    try:
+        data = json.loads(AI_SETTINGS_FILE.read_text())
+        configure_ai(str(data.get("provider", "auto")), str(data.get("model", "")), str(data.get("key", "")))
+        return True
+    except (OSError, ValueError):
+        return False
+DEFAULT_MODELS = {"openai": "gpt-4o-mini", "claude": "claude-sonnet-4-6"}
+
+# The owner's rule: the AI model answers only while the shop is online. Offline, the
+# verified skills and the quick actions keep working and no model is called at all.
+_NET = {"at": 0.0, "online": False}
+OFFLINE_AR = ("ما فيه إنترنت الحين، فالمساعد الذكي متوقف عشان ما يجاوب بشيء ما يقدر يتحقق منه. "
+              "تقدر تستخدم الاختيارات السريعة فوق: كم اليوم، وش عندي، سوّ خصم، جرد، أضف موظف.")
+OFFLINE_EN = ("There is no internet right now, so the AI assistant is paused. "
+              "The quick actions above still work: today's sales, stock, discount, stock count, add staff.")
+
+
+def internet_available() -> bool:
+    """Cached for 20 s. RIZQ_ONLINE=1/0 pins the answer (tests, kiosks)."""
+    pinned = os.environ.get("RIZQ_ONLINE")
+    if pinned in ("0", "1"):
+        return pinned == "1"
+    now = time.time()
+    if now - _NET["at"] < 20:
+        return _NET["online"]
+    import socket
+    online = False
+    for host, port in (("1.1.1.1", 443), ("8.8.8.8", 53)):
+        try:
+            socket.create_connection((host, port), timeout=1.5).close()
+            online = True
+            break
+        except OSError:
+            continue
+    _NET.update(at=now, online=online)
+    return online
+
+
+def provider_error_message(error: Exception, model: str) -> str:
+    """Turn a cloud provider failure into a message the owner can act on. Never echoes the key."""
+    if not isinstance(error, urllib.error.HTTPError):
+        return "تعذر الاتصال بالمزود. تأكد من الإنترنت ثم أعد المحاولة."
+    try:
+        detail = json.loads(error.read() or b"{}").get("error", "")
+        detail = str(detail.get("message", "") if isinstance(detail, dict) else detail)[:200]
+    except Exception:
+        detail = ""
+    if error.code in (401, 403):
+        # The provider's own text can include part of the key, so it is not shown.
+        return "المفتاح غير صحيح أو ليس له صلاحية عند المزود. تأكد منه في إعدادات المساعد."
+    if error.code == 404:
+        return f"النموذج \"{model}\" غير متاح لهذا المفتاح. اترك اسم النموذج فارغًا أو صحّحه."
+    if error.code == 429:
+        return f"المزود رفض الطلب: تجاوزت حد الاستخدام أو انتهى الرصيد. {detail}".strip()
+    return f"المزود رفض الطلب ({error.code}). {detail}".strip()
+
+
+def check_ai_key(provider: str, model: str, key: str) -> None:
+    """Send the smallest real request, shaped like the chat's, so a wrong key, wrong model
+    or empty balance is reported when the owner saves it rather than in the middle of a chat."""
+    if provider not in DEFAULT_MODELS:
+        return
+    model = model or DEFAULT_MODELS[provider]
+    security.note_paid_call(provider)
+    if provider == "claude":
+        base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+        request = urllib.request.Request(
+            base.rstrip("/") + "/v1/messages",
+            data=json.dumps({"model": model, "max_tokens": 16,
+                             "messages": [{"role": "user", "content": "ping"}]}).encode(),
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
+    else:
+        request = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps({"model": model, "temperature": 0, "max_tokens": 16,
+                             "messages": [{"role": "user", "content": "ping"}]}).encode(),
+            headers={"Authorization": f"Bearer {key}", "content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=30):
+            return
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ValueError(provider_error_message(e, model)) from None
+
+
+def configure_ai(provider: str, model: str, key: str, check=None) -> None:
+    if provider not in ("auto", "openai", "claude", "ollama", "rules"):
+        raise ValueError("مزود النموذج غير مدعوم")
+    if len(model) > 120 or len(key) > 512 or any(c in key for c in "\r\n"):
+        raise ValueError("إعدادات النموذج غير صالحة")
+    if provider in ("openai", "claude") and not key.strip():
+        raise ValueError("أدخل مفتاح API للمزود المختار")
+    if check:
+        check(provider, model.strip(), key.strip())     # raises before anything is stored
+    with AI_SETTINGS_LOCK:
+        AI_SETTINGS.update(provider=provider, model=model.strip(), key=key.strip(),
+                           version=AI_SETTINGS["version"] + 1)
+
+
+def configured_brain():
+    with AI_SETTINGS_LOCK:
+        cfg = dict(AI_SETTINGS)
+    provider, model, key = cfg["provider"], cfg["model"], cfg["key"]
+    if provider == "openai":
+        brain = copilot.OpenAICompatBrain("https://api.openai.com/v1", model or DEFAULT_MODELS["openai"], key, paid=True)
+    elif provider == "claude":
+        brain = copilot.ClaudeBrain(model or DEFAULT_MODELS["claude"], key=key)
+    else:
+        # Automatic cashier routing stays on this device even if cloud credentials
+        # happen to exist in the environment. Cloud use requires an explicit choice.
+        brain = copilot.pick_brain("ollama" if provider == "auto" else provider, model or None)
+    return brain, provider, cfg["version"]
 
 
 def load_dotenv() -> None:
@@ -48,7 +185,7 @@ def provider_status() -> dict:
     return {
         "active": os.environ.get("RIZQ_LLM_PROVIDER", "auto"),
         "ollama": {"available": bool(ollama), "model": ollama},
-        "claude": {"available": bool(copilot._load_key()), "model": os.environ.get("RIZQ_CLAUDE_MODEL", "claude-sonnet-5-5")},
+        "claude": {"available": bool(copilot._load_key()), "model": os.environ.get("RIZQ_CLAUDE_MODEL", "claude-sonnet-4-6")},
         "openai": {"available": bool(os.environ.get("OPENAI_API_KEY")), "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini")},
         "compatible": {"available": bool(os.environ.get("RIZQ_LLM_BASE_URL")), "model": os.environ.get("RIZQ_LLM_MODEL", ""),
                        "base_url": os.environ.get("RIZQ_LLM_BASE_URL", "")},
@@ -147,6 +284,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _do_GET(self):
         path = unquote(urlparse(self.path).path)
+        if path == "/api/net/status":
+            self.send_json({"online": internet_available()})
+            return
         if path == "/api/health":
             try:
                 validate_database(ACTIVE_DB)
@@ -166,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "database": {"ready": db_ok}})
             return
         if path == "/api/skills":
-            learned = skills.load_learned(str(ROOT / "results" / "skills_learned.json"))
+            learned = skills.load_learned(str(RESULTS / "skills_learned.json"))
             self.send_json({"skills": {n: s.title_ar for n, s in skills.SKILLS.items()},
                             "learned": {n: v["description"] for n, v in learned.items()}})
             return
@@ -201,7 +341,7 @@ class Handler(BaseHTTPRequestHandler):
             name, blob = export.build(str(ACTIVE_DB), who=f"{actor['name']} ({actor['role']})",
                                       audit_path=permissions.AUDIT_PATH,
                                       memory_path=memory.PATH,
-                                      escalations_path=ROOT / "results" / "escalations.jsonl")
+                                      escalations_path=RESULTS / "escalations.jsonl")
             permissions.audit(actor, "export_data", allowed=True, detail={"bytes": len(blob)})
             security.alert("data_exported", {"user_id": actor["user_id"], "bytes": len(blob)})
             self.send_response(200)
@@ -296,6 +436,55 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             body = self.read_json()
+            if path in ("/api/ai/settings", "/api/ai/settings/status", "/api/ai/models", "/api/ai/models/pull",
+                        "/api/payments/device", "/api/payments/device/status"):
+                actor = self.actor(body, require_owner=True)
+                self.guard("auth")
+                host = self.headers.get("Host", "")
+                origin = self.headers.get("Origin", "")
+                hostname = urlparse("http://" + host).hostname
+                import ipaddress
+                try:
+                    local_client = ipaddress.ip_address(self.client_address[0]).is_loopback
+                except ValueError:
+                    local_client = False
+                if not local_client or hostname not in ("localhost", "127.0.0.1", "::1") or origin != "http://" + host:
+                    raise permissions.PermissionDenied("إعداد المفتاح متاح من هذا الجهاز فقط ومن صفحة رزق.")
+                if path == "/api/ai/models":
+                    self.send_json(models.status())
+                    return
+                if path == "/api/payments/device/status":
+                    cfg = payments.load()
+                    self.send_json({**cfg, "label": payments.TYPES.get(cfg.get("type"), ""), "types": payments.TYPES})
+                    return
+                if path == "/api/payments/device":
+                    result = payments.save_and_test(body)
+                    permissions.audit(actor, "payments.device", allowed=True, detail={"type": result["type"]})
+                    self.send_json(result)
+                    return
+                if path == "/api/ai/models/pull":
+                    name = str(body.get("name", "")).strip()
+                    try:
+                        download = models.start_pull(name)
+                    except ValueError as e:
+                        self.send_json({"error": str(e), "alternative": getattr(e, "alternative", None)}, 400)
+                        return
+                    permissions.audit(actor, "ai.model_pull", allowed=True, detail={"model": name})
+                    self.send_json({"model": name, "download": download})
+                    return
+                verified = False
+                if path == "/api/ai/settings":
+                    configure_ai(str(body.get("provider", "auto")), str(body.get("model", "")), str(body.get("key", "")),
+                                 check=check_ai_key)
+                    save_ai_settings()
+                    with LOCAL_SESSIONS_LOCK:
+                        LOCAL_SESSIONS.clear()
+                    permissions.audit(actor, "ai.configure", allowed=True, detail={"provider": AI_SETTINGS["provider"]})
+                    verified = AI_SETTINGS["provider"] in DEFAULT_MODELS
+                with AI_SETTINGS_LOCK:
+                    self.send_json({"provider": AI_SETTINGS["provider"], "model": AI_SETTINGS["model"],
+                                    "configured": bool(AI_SETTINGS["key"]), "verified": verified})
+                return
             if path == "/api/auth/login":
                 self.guard("auth")
                 # The PIN is checked on the server against the cashier's own users
@@ -397,7 +586,21 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/memory/history":
                 # Server-resolved identity: a caller can only read its own history.
                 actor = self.actor(body)
-                self.send_json({"messages": memory.history(actor["user_id"])})
+                conv = str(body.get("conversation") or "")[:64] or None
+                self.send_json({"messages": memory.history(actor["user_id"], conv)})
+                return
+            if path == "/api/import/products":
+                actor = self.actor(body, require_owner=True)
+                self.guard("chat")
+                raw = base64.b64decode(body.get("file_base64", ""), validate=True)
+                result = importer.products(str(body.get("filename", "")), raw)
+                permissions.audit(actor, "import.products", allowed=True,
+                                  detail={"items": len(result["items"]), "skipped": len(result["skipped"])})
+                self.send_json(result)
+                return
+            if path == "/api/memory/conversations":
+                actor = self.actor(body)
+                self.send_json({"conversations": memory.conversations(actor["user_id"])})
                 return
             if path in ("/api/code/propose", "/api/code/apply"):
                 # Changing code is the most dangerous thing the agent can do, so it needs
@@ -406,6 +609,8 @@ class Handler(BaseHTTPRequestHandler):
                 # unauthenticated caller gets a straight 403 rather than a 400 that makes
                 # the route look merely malformed.
                 actor = self.actor(body, require_owner=True)
+                if os.environ.get("RIZQ_DESKTOP") == "1":
+                    raise ValueError("مساعد تعديل الكود متاح فقط في نسخة المصدر للمطورين.")
                 self.guard("code")
                 # Same-origin in the real sense: the page asking must be this server.
                 # Pinning to 127.0.0.1 would break the till's tablets, so compare the
@@ -483,12 +688,15 @@ class Handler(BaseHTTPRequestHandler):
                 # Derived-data repairs now need BOTH a server-verified owner role and an
                 # explicit per-message approval. The flag alone is not authorization.
                 approved = bool(body.get("approve_repairs")) and actor["role"] == "owner"
+                conv = str(body.get("conversation") or "")[:64] or None
+                if conv and not all(c.isalnum() or c in "-_" for c in conv):
+                    raise ValueError("معرّف المحادثة غير صالح")
                 fd, filename = tempfile.mkstemp(prefix="rizq-chat-", suffix=".sqlite")
                 try:
                     with os.fdopen(fd, "wb") as fh:
                         fh.write(raw)
                     validate_database(pathlib.Path(filename))
-                    tools = copilot.PosTools(filename, str(ROOT / "results"),
+                    tools = copilot.PosTools(filename, str(RESULTS),
                                              confirm=lambda _: approved, actor=actor)
                 finally:
                     pathlib.Path(filename).unlink(missing_ok=True)
@@ -500,39 +708,66 @@ class Handler(BaseHTTPRequestHandler):
                 # RIZQ_FORCE_MODEL=1 overrides, for comparing the two paths.
                 verdict = triage.classify(message)
                 force = os.environ.get("RIZQ_FORCE_MODEL") == "1"
-                needs_model = force or verdict["action"] == triage.BUILD
+                with AI_SETTINGS_LOCK:
+                    explicit_model = AI_SETTINGS["provider"] in ("auto", "openai", "claude", "ollama")
+                # A configured model can interpret an otherwise unrecognized request;
+                # hard refusals still run before the model inside copilot.ask.
+                needs_model = (force or verdict["action"] == triage.BUILD or
+                               (explicit_model and verdict["action"] == triage.REFUSE and not verdict.get("hard")))
                 sid = str(body.get("session", ""))
+                if needs_model and AI_SETTINGS["provider"] != "rules" and not internet_available():
+                    answer = OFFLINE_AR if reply_lang(message) != "en" else OFFLINE_EN
+                    memory.append_exchange(user_id, message, answer, conv)
+                    self.send_json({"session": sid, "answer": answer, "provider": "offline", "model": "",
+                                    "offline": True, "actions": []})
+                    tools.db.close()
+                    return
                 try:
                     if not needs_model:
                         answer = copilot.ask(copilot.RulesBrain(), tools, message,
                                              on_event=lambda _: None)
                         verdict = tools.last_verdict
-                        memory.append_exchange(user_id, message, answer)
+                        memory.append_exchange(user_id, message, answer, conv)
                         self.send_json({"session": sid, "answer": answer, "provider": "rules",
                                         "model": "", "actions": tools.log[-10:],
                                         "confidence": verdict.as_dict() if verdict else None})
                         return
                     with LOCAL_SESSIONS_LOCK:
                         state = LOCAL_SESSIONS.get(sid)
-                        if not state or state["user_id"] != user_id:
-                            brain = copilot.pick_brain("ollama")
+                        with AI_SETTINGS_LOCK:
+                            current_version = AI_SETTINGS["version"]
+                        if not state or state["user_id"] != user_id or state.get("settings_version") != current_version:
+                            brain, selected_provider, version = configured_brain()
                             if isinstance(brain, copilot.RulesBrain):
-                                raise ValueError("Ollama or a supported local model is unavailable.")
+                                if verdict["action"] == triage.REFUSE and not force:
+                                    answer = copilot.ask(brain, tools, message, on_event=lambda _: None)
+                                    memory.append_exchange(user_id, message, answer, conv)
+                                    self.send_json({"session": sid, "answer": answer, "provider": "rules",
+                                                    "model": "", "actions": tools.log[-10:]})
+                                    return
+                                raise ValueError("هذا الطلب يحتاج نموذجًا. اضبط مفتاح API من إعدادات المساعد أو شغّل Ollama.")
                             if isinstance(brain, copilot.OpenAICompatBrain):
-                                for msg in memory.recent(user_id, 12):
+                                for msg in memory.recent(user_id, 12, conv):
                                     brain.msgs.append({"role": msg["role"], "content": msg["text"][:4000]})
                             sid = secrets.token_urlsafe(24)
-                            state = {"user_id": user_id, "brain": brain, "lock": threading.Lock()}
+                            state = {"user_id": user_id, "brain": brain, "provider": selected_provider,
+                                     "settings_version": version, "lock": threading.Lock()}
                             LOCAL_SESSIONS[sid] = state
                     with state["lock"]:
-                        answer = copilot.ask(state["brain"], tools, message, on_event=lambda _: None)
+                        try:
+                            answer = copilot.ask(state["brain"], tools, message, on_event=lambda _: None)
+                        except (urllib.error.URLError, TimeoutError) as e:
+                            # A key revoked or out of credit after it was saved.
+                            if state["provider"] not in DEFAULT_MODELS:
+                                raise
+                            raise ValueError(provider_error_message(e, getattr(state["brain"], "model", ""))) from None
                     used = getattr(state["brain"], "model", "")
                     verdict = confidence.score_model_answer(answer, tools.log)
                     escalated_to = None
                     if not verdict.approved:
                         # Not good enough to present as fact. Try a larger model once
                         # before giving up; the owner asked for exactly this ladder.
-                        bigger = confidence.bigger_model(used, confidence.installed_models())
+                        bigger = confidence.bigger_model(used, models.runnable(confidence.installed_models())) if state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False) and not isinstance(state["brain"], copilot.ClaudeBrain) else None
                         if bigger:
                             try:
                                 # Same tools, so the retry reads the same snapshot under
@@ -545,10 +780,15 @@ class Handler(BaseHTTPRequestHandler):
                                     answer, verdict, escalated_to = answer2, v2, bigger
                             except Exception:
                                 pass                      # keep the first answer
+                    if escalated_to:
+                        answer = (f"النموذج الخفيف ({used}) ما قدر يتحقق من الجواب، فحوّلت السؤال لنموذج أكبر ({escalated_to}).\n"
+                                  + (answer or ""))
                     if not verdict.approved:
                         answer = (answer or "").rstrip() + "\n" + verdict.note_ar()
-                    memory.append_exchange(user_id, message, answer)
-                    self.send_json({"session": sid, "answer": answer, "provider": "ollama",
+                        if not bigger and state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False):
+                            answer += "\nما فيه نموذج أكبر محمّل يتحمله جهازك. تقدر تنزّل واحد من إعدادات المساعد ← النماذج المجانية."
+                    memory.append_exchange(user_id, message, answer, conv)
+                    self.send_json({"session": sid, "answer": answer, "provider": state["brain"].name,
                                     "model": escalated_to or used,
                                     "confidence": verdict.as_dict(),
                                     "escalated_to": escalated_to,
@@ -574,7 +814,7 @@ class Handler(BaseHTTPRequestHandler):
                     brain = copilot.pick_brain(provider, model)
                     state = {"provider": provider, "model": model, "actor": actor,
                              "brain": brain,
-                             "tools": copilot.PosTools(str(ACTIVE_DB), str(ROOT / "results"),
+                             "tools": copilot.PosTools(str(ACTIVE_DB), str(RESULTS),
                                                        confirm=lambda _: False, actor=actor)}
                     SESSIONS[sid] = state
                 # The role is now resolved on the server from a PIN, so an explicit
@@ -617,6 +857,7 @@ def local_ip() -> str | None:
 
 def main(port: int = 8000, host: str | None = None):
     load_dotenv()
+    load_ai_settings()
     # Default stays loopback. Binding to every interface is opt-in, because it puts
     # the till on the shop's network: that is the point for an iPad, but it should
     # never happen by accident.

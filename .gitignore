@@ -14,3 +14,11 @@ agent/runtime/results/*.sqlite
 # Backups written by the POS bundle patch script
 rizq-pos/assets/*.bak
 rizq-pos/*.bak
+
+# Desktop builds and local virtual environments
+build/
+dist/
+.venv/
+
+# Discarded model replies (local log, may contain business figures)
+agent/runtime/results/reply_guard.jsonl

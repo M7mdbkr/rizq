@@ -51,7 +51,7 @@ problem in their own dialect, and the agent does one of four things — and says
 
 - **Works offline.** SQLite runs inside the browser: no server, no internet needed to sell.
 - **A free, local AI agent.** Rules-first, with a local model (Qwen3 via Ollama) only where rules run out. No API key, no per-question cost, the data stays in the restaurant.
-- **Any LLM can be plugged in.** Put an Anthropic key in `agent/runtime/.env` and the same agent uses it instead.
+- **Choose a model.** The owner can configure OpenAI or Claude in the cashier, or use Ollama locally.
 - **It builds its own features.** A missing capability becomes a read-only skill that two different queries must agree on, installed only after the owner says yes.
 - **Safety lives in the tools, not the prompt.** Read-only SQL, repair on a copy, deny-by-default roles, an append-only audit log.
 - **Honest evaluation.** Held-out sets run once at freeze, ablations, and the misses published.
@@ -107,6 +107,10 @@ somebody's phone.
 
 ## Quick start
 
+For the desktop-window edition and platform build instructions, see
+[desktop/README.md](desktop/README.md). This edition uses a native window around
+the existing web interface; platform builds and data migration still need validation.
+
 ### Requirements
 
 - **macOS or Linux**, Python **3.9+** (no packages to install — standard library only)
@@ -137,8 +141,13 @@ ollama pull qwen3:8b           # conversation fallback
 ollama pull qwen2.5-coder:7b   # writing code changes
 ```
 
-Nothing leaves your machine, and there is no API key and no per-question cost. Claude is
-supported instead if you put `ANTHROPIC_API_KEY` in `agent/runtime/.env`.
+For cloud AI, sign in as the owner on this device and open **الإعدادات → إعدادات المساعد الذكي**
+inside the cashier. Choose OpenAI or Claude, enter its API key and save. The key is kept only in
+server memory and must be entered again after a restart. The key is not validated until
+the first model request. Cloud providers may receive the message and tool results and
+may charge for usage; local rules and Ollama avoid those cloud calls. Common supported
+questions use verified rules first; the model is called when those rules require it.
+The separate code-change assistant still requires Ollama and a code-admin password.
 
 ### Signing in
 
@@ -269,6 +278,33 @@ cd agent/runtime && python3 -m rizq_agent.code_agent
 ```
 
 ---
+
+### Clean answers, and no AI without internet
+
+Every reply passes `rizq_agent/reply.py` before the owner sees it: hidden reasoning, tool markup,
+markdown, emoji and repeated lines are removed; a reply in the wrong language, in a foreign script,
+or with a number no tool returned is discarded and replaced by the verified skill answer.
+Without internet the AI model is not called at all; verified answers and the quick actions keep
+working (`tests/test_reply.py`, `tests/test_offline_sessions_payments.py`).
+
+### Quick actions, sessions, import
+
+The assistant page has buttons that work offline: today's sales, "what do I have", discount code,
+stock count, add a cashier, import products from Excel/CSV, and saved conversations by day and time.
+Anything that changes data is proposed in the chat and saved only when the owner presses confirm.
+The Excel/CSV file is parsed on the server, so a tablet on the shop Wi-Fi can upload it
+(`tests/test_importer.py`). Each device keeps its own POS database.
+
+### Free local models, payment device, Telegram
+
+Settings lists free Ollama models with a device check (memory and disk) and a one-click download;
+a model the device cannot run is refused with the largest one that fits (`tests/test_models.py`).
+A payment device can be set (none, simulator, or a terminal on the shop network, reachability only);
+a receipt is issued only for a confirmed, exact payment, at most once per payment id
+(`tests/test_offline_sessions_payments.py`). Real terminals are **not verified on hardware**.
+Telegram pairs the owner's chat with a one-time code, and the daily report is sent after closing
+(`tests/test_pos_bundle.py`). The bot runs while a POS window is open; live use is not verified.
+AI settings are saved on this device only (file mode 600, outside git).
 
 ## Testing
 

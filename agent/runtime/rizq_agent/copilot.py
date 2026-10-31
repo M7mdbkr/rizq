@@ -25,7 +25,7 @@ import urllib.request
 from collections import Counter
 from dataclasses import asdict
 
-from . import confidence, export, fill, permissions, phrase, rizq, schedule, skills, triage
+from . import confidence, export, fill, permissions, phrase, reply, rizq, schedule, security, skills, triage
 from .llm import _load_key
 
 MAX_STEPS = 10
@@ -48,7 +48,11 @@ You can act on the real POS database ONLY through your tools. Rules:
   only verified read-only report skills; never claim that you wrote or enabled production POS code.
 - Zakat is an ESTIMATE: always show the assumptions returned by the skill and say to confirm with ZATCA or an accountant.
 - If you are not sure, escalate. Never invent tools, ids or numbers.
-- Reply in the user's language. If the user writes Arabic, reply in Gulf Arabic and keep technical terms in English. Be short."""
+- Answer only in the user's language: Gulf Arabic if they wrote Arabic, English if they wrote English. Never use Chinese
+  or any other language.
+- Answer only what was asked, in plain short sentences, warm and natural like a helpful person (for example
+  "أبشر، مبيعاتك اليوم ..."). No emojis, no markdown symbols, no tags, no JSON.
+- Every number you say must come from a tool result in this conversation. Do not compute new totals yourself."""
 
 TOOLS = [
     {"name": "scan_pos", "description": "Check every business rule on the POS database (totals, VAT, stock, customers, duplicates, payment methods, timestamps). Returns findings with handling auto|escalate.",
@@ -179,10 +183,19 @@ class PosTools:
                    ROUND(SUM(discount_amount),2) discounts
             FROM orders WHERE status='completed' AND date(created_at) > (SELECT date(MAX(created_at), ?) FROM orders)
             GROUP BY d ORDER BY d""", (f"-{days} days",)).fetchall()
-        pay = self.db.execute("""SELECT payment_method, COUNT(*) n, ROUND(SUM(final_total),2) total FROM orders
+        # The method's display name comes with its id: given only "merzool" the model
+        # invented a spelling ("ميرزول") instead of the owner's "مرسول".
+        names = {}
+        try:
+            names = {r[0]: (r[1], r[2]) for r in self.db.execute("SELECT id, name, kind FROM payment_methods")}
+        except sqlite3.Error:
+            pass
+        pay = [dict(r) for r in self.db.execute("""SELECT payment_method, COUNT(*) n, ROUND(SUM(final_total),2) total FROM orders
             WHERE status='completed' AND date(created_at) > (SELECT date(MAX(created_at), ?) FROM orders) GROUP BY 1""",
-                              (f"-{days} days",)).fetchall()
-        return {"per_day": [dict(r) for r in rows], "by_payment_method": [dict(r) for r in pay]}
+                              (f"-{days} days",)).fetchall()]
+        for r in pay:
+            r["name"], r["kind"] = names.get(r["payment_method"], (r["payment_method"], "unknown"))
+        return {"per_day": [dict(r) for r in rows], "by_payment_method": pay}
 
     def t_plan_fixes(self) -> dict:
         if self.findings is None:
@@ -241,7 +254,7 @@ class PosTools:
         return skills.build_learned_skill(self.db, self.learned_path, name, description, sql, check_sql, self.confirm)
 
     def t_list_features(self) -> dict:
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "features", "parked.json")
+        path = os.path.join(os.environ.get("RIZQ_ASSET_RUNTIME", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "features", "parked.json")
         with open(path, encoding="utf-8") as fh:
             result = json.load(fh)
         with open(os.path.join(os.path.dirname(path), "capabilities.json"), encoding="utf-8") as fh:
@@ -249,7 +262,7 @@ class PosTools:
         return result
 
     def t_list_known_problems(self) -> dict:
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "problems", "catalog.json")
+        path = os.path.join(os.environ.get("RIZQ_ASSET_RUNTIME", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "problems", "catalog.json")
         with open(path, encoding="utf-8") as fh:
             result = json.load(fh)
         with open(os.path.join(os.path.dirname(path), "scanner.json"), encoding="utf-8") as fh:
@@ -310,15 +323,16 @@ class PosTools:
 class ClaudeBrain:
     name = "claude"
 
-    def __init__(self, model: str | None = None):
-        self.model = model or os.environ.get("RIZQ_CLAUDE_MODEL", "claude-sonnet-5-5")
-        self.key = _load_key()
+    def __init__(self, model: str | None = None, key: str | None = None):
+        self.model = model or os.environ.get("RIZQ_CLAUDE_MODEL", "claude-sonnet-4-6")
+        self.key = key if key is not None else _load_key()
         self.msgs: list = []
 
     def user(self, text: str) -> None:
         self.msgs.append({"role": "user", "content": text})
 
     def step(self) -> dict:
+        security.note_paid_call("claude")
         body = {"model": self.model, "max_tokens": 1500, "system": SYSTEM, "tools": TOOLS, "messages": self.msgs}
         base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
         req = urllib.request.Request(base.rstrip("/") + "/v1/messages", data=json.dumps(body).encode(),
@@ -340,9 +354,10 @@ class OpenAICompatBrain:
     """Ollama / LM Studio (local, offline) or any OpenAI-compatible endpoint (Groq, OpenRouter...)."""
     name = "openai-compatible"
 
-    def __init__(self, base_url: str, model: str, key: str = "local"):
+    def __init__(self, base_url: str, model: str, key: str = "local", paid: bool = False):
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model, self.key = model, key
+        self.paid = paid
         self.msgs: list = [{"role": "system", "content": SYSTEM}]
         self.tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                          "parameters": t["input_schema"]}} for t in TOOLS]
@@ -351,6 +366,8 @@ class OpenAICompatBrain:
         self.msgs.append({"role": "user", "content": text})
 
     def step(self) -> dict:
+        if self.paid:
+            security.note_paid_call("openai")
         # Without an explicit cap some servers truncate long replies; a code edit
         # that loses its closing marker is unusable. Tools are omitted entirely when
         # none are registered, because some backends reject an empty tools array.
@@ -561,7 +578,7 @@ def pick_brain(kind: str = "auto", model: str | None = None):
         default_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini") if kind == "openai" else os.environ.get("RIZQ_LLM_MODEL", "")
         if kind == "compatible" and not (model or default_model):
             raise ValueError("Set RIZQ_LLM_MODEL in agent/runtime/.env for the compatible LLM endpoint")
-        return OpenAICompatBrain(base_url, model or default_model, api_key)
+        return OpenAICompatBrain(base_url, model or default_model, api_key, paid=kind == "openai")
     return RulesBrain()
 
 
@@ -577,10 +594,11 @@ def ask(brain, tools: PosTools, question: str, on_event=print) -> str:
     for _ in range(MAX_STEPS):
         r = brain.step()
         if not r["calls"]:
-            return r["text"]
+            return reply.finish(r["text"], question, tools, on_event)
         pairs = []
         for c in r["calls"]:
             on_event(f"  ⚙ {c['name']}({json.dumps(c['input'], ensure_ascii=False)})")
             pairs.append((c, tools.call(c["name"], c["input"])))
         brain.results(pairs)
-    return "(stopped: step budget reached - escalating instead of looping)"
+    on_event("  ⚠ step budget reached")
+    return reply.step_budget(question)

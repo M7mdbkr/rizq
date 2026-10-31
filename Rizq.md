@@ -26,6 +26,12 @@ You are continuing work for Mohammad. Read this whole section before doing anyth
 10. Don't claim something works without running it. State what was not verified.
 11. Global (from his CLAUDE.md): don't save sessions to his Obsidian "AI Black Box" unless he says احفظ/وثق; check his reference library before building from scratch (it was NOT found on this Mac: `~/Desktop/AI` does not exist).
 
+### Current session update (31 Oct 2026)
+- Inventory shows existing categories as cards and filters products when opened. Existing product add/edit/restock controls are retained; new products default to the selected category. Category rename was added. Visually checked category cards, filtering, new-item default and rename controls in Safari; no data was changed during the check.
+- Assistant settings are now inside owner settings; API-key settings and model routing are implemented in source, but the running server is an older process. Restart is required and was blocked by the execution environment; the live API-key flow and Qwen integration remain unverified.
+- A local `Rizq.app` launcher was prepared in the project with the Rizq icon; it depends on this project, Python and Alfred's installed Electron runtime. It has not been successfully launched in this sandbox, and could not be placed on the Desktop due to filesystem restrictions. It is not a standalone distributable.
+- Per-page specialist agents remain unfinished. The instructed Alfred master prompt is unavailable at its recorded path; do not claim that specialist agents are connected.
+
 ### C. What happened, step by step (30 Oct 2026)
 1. Before this session: **Rizq recovery agent** was built for Challenge 1 (agent that detects/repairs silent POS failures with invariants), tested on Rizq's REAL exported database, found 2 real Rizq bugs. Hackathon notes: `../../playbook.md`.
 2. Mohammad asked for an AI agent inside Rizq that users talk to (zakat + income example) and a full program with tests.
@@ -201,6 +207,47 @@ asked for — export the file, hand it back, get it filled from the database.
   for the owner to apply in the till — money never moves on a timer. Hijri dates are not
   computed, because guessing the day of Eid is worse than asking.
 - **`SOLUTIONS.md`**: nine real problems with the test that proves each.
+
+### C-7. Payments, Telegram, free models, clean replies (31 Oct 2026, ~18:20-18:40)
+- **Payment methods** (`tools/pos_patches/patch_payments_telegram.py`): new databases get cash, mada, Visa, Mastercard,
+  Apple Pay, STC Pay and HungerStation, Jahez, Keeta, Mrsool, Ninja, ToYou, The Chefz. Existing databases get the missing
+  ones once (marker row in `rizq_meta`), so owner renames and deletions stick. These are labels for recording how an
+  order was paid; no card terminal or delivery-app API is connected (not verified on hardware).
+- **Telegram (browser bot in the POS)**: CORS to api.telegram.org verified (preflight 204). Four bugs fixed: the daily
+  report went out at the first app open of the UTC day (an empty day) — now once after 23:00 local, retried if
+  rejected; "top sellers" in it was all-time — now today; a name with `<` or `&` made Telegram drop the message — now
+  resent as plain text; one exception stopped polling for good — now contained. Limits: works only while a POS tab is
+  open; live token test not done (owner enters the token in Settings → Telegram → test).
+- **Free models** (`rizq_agent/models.py`, `/api/ai/models`, `/api/ai/models/pull`, settings panel): catalog of 8 free
+  Ollama models, device RAM/disk check, refusal with the largest model that fits, one-click download with progress.
+  The escalation ladder now skips models the device cannot run and never steps down; a reply says when it was handed
+  to a bigger model.
+- **Clean replies** (`rizq_agent/reply.py`, wired into `copilot.ask`): strips `<think>`, tool markup, markdown, emoji,
+  repeated lines, unasked follow-up offers; rejects foreign script, wrong language and numbers no tool returned, then
+  falls back to the verified skill answer. Reproduced before the fix on qwen3:8b: an English question answered in
+  Arabic, payment ids transliterated ("ميرزول"), unasked follow-ups. `sales_summary` now returns method names.
+  Known limit: the VAT skill is monthly, so "this week's VAT" returns the month.
+- Triage: plural "الأرقام السرية" was not refused before the model; fixed.
+- Tests: 315/315 (`test_pos_bundle` 8, `test_models` 18, `test_reply` 11).
+- Verified in real Chrome on a fresh test origin: the patched POS boots, Settings lists all 13 methods, the free-models
+  panel reads this Mac (24 GB, 8 models installed). Figures phrase.py derives from a verified skill count as grounded.
+- Restarted at 18:57 on the new code: web server `:8000` (log `~/Library/Logs/rizq-web.log`) and the desktop app
+  (`Rizq.app`, backend `:47192`). API keys are in memory only, so re-enter one after a restart if used.
+
+### C-8. Offline mode, quick actions, sessions, import, payment device (31 Oct 2026, ~19:00-19:20)
+- AI model only with internet (`web.internet_available`, `/api/net/status`); offline, verified skills and quick
+  actions still answer. Quick-action bar on the assistant page (today, stock, discount, stock count, add cashier,
+  Excel/CSV import, conversations). Data changes are proposed in chat and saved on the owner's confirm button.
+- Conversations by day/time in `chat_memory.sqlite` (`conversation` column; older rows grouped by day).
+- `importer.py` parses .xlsx/.csv (stdlib), owner-only `/api/import/products`; works from a LAN tablet.
+- `payments.py`: adapter interface, simulator, network-terminal reachability; receipt only on confirmed exact
+  payment, idempotent; owner-only `/api/payments/device`. Not verified on hardware.
+- Telegram pairing by one-time code (`patch_telegram_pairing.py`). Bot token checked read-only: @RizqAiAgent_bot
+  works, no webhook. The token was pasted in chat: rotate it in @BotFather.
+- AI settings persisted to `data/ai_settings.json` (0600, gitignored); tests mock the save.
+- Verified in real Chrome on an offline test copy: offline message, verified sales answer, restock 80→85 on
+  confirm, add cashier, duplicate PIN refused, CSV import (1 added, 2 existing skipped), conversation listed.
+- Tests: 335 (see suite).
 
 ### D. Where things stand / what is in progress
 - Tests: **267/267 pass** (31 Oct, ~15:00), including 26 scenario tests, the confidence gate and the scheduler. Earlier counts are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.

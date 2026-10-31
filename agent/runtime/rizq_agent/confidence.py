@@ -155,8 +155,12 @@ def score_model_answer(answer: str, tool_log: list) -> Verdict:
 
 
 def bigger_model(current: str | None, installed: list) -> str | None:
-    """The next model up from `current` that is actually installed."""
-    for name in ESCALATION_MODELS:
+    """The best installed model above `current`. Never a smaller one: when the biggest
+    model already failed, the next step is a human, not a weaker model."""
+    ladder = ESCALATION_MODELS
+    if current in ladder:
+        ladder = ladder[:ladder.index(current)]
+    for name in ladder:
         if name in installed and name != current:
             return name
     return None
