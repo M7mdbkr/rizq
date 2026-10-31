@@ -90,6 +90,14 @@ def runnable(installed: list, dev: dict | None = None) -> list:
     return [n for n in installed if n not in BY_NAME or fits(n, dev)]
 
 
+def quick(installed: list, dev: dict | None = None) -> list:
+    """Installed models small enough to answer while the owner waits: at most half the
+    device's memory. Larger ones load slowly and starve the POS of memory."""
+    dev = dev or device()
+    return [n for n in runnable(installed, dev)
+            if n not in BY_NAME or not dev["ram_gb"] or BY_NAME[n]["size_gb"] <= dev["ram_gb"] / 2]
+
+
 def installed(base: str = OLLAMA) -> list | None:
     """Installed model names, or None when Ollama is not running."""
     try:

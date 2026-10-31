@@ -153,6 +153,12 @@ class LadderTests(unittest.TestCase):
         web.AI_SETTINGS.clear()
         web.AI_SETTINGS.update(self.previous)
 
+    def test_escalation_goes_one_step_up_and_skips_models_too_big_to_wait_for(self):
+        installed = ["qwen3:8b", "qwen3.5:9b", "gpt-oss:20b", "qwen3.6:27b"]
+        self.assertEqual(confidence.bigger_model("qwen3:8b", installed), "qwen3.5:9b")
+        on_24gb = {"ram_gb": 24.0, "disk_free_gb": 500.0}
+        self.assertEqual(models.quick(installed, on_24gb), ["qwen3:8b", "qwen3.5:9b"])
+
     def test_the_ladder_never_steps_down(self):
         self.assertIsNone(confidence.bigger_model("qwen3.6:27b", ["qwen3.6:27b", "gpt-oss:20b", "qwen3:8b"]))
         self.assertEqual(confidence.bigger_model("gpt-oss:20b", ["qwen3.6:27b", "gpt-oss:20b"]), "qwen3.6:27b")
@@ -189,7 +195,7 @@ class LadderTests(unittest.TestCase):
     def test_escalation_note_when_a_bigger_model_answers(self):
         with mock.patch.object(models, "device", return_value=BIG):
             web.configure_ai("auto", "", "")
-        with mock.patch.object(models, "runnable", side_effect=lambda names, dev=None: names):
+        with mock.patch.object(models, "quick", side_effect=lambda names, dev=None: names):
             result = self.chat(["ما أدري", "السبب: نقص الطلبات يوم الخميس"], [60, 97], ["qwen3:8b", "gpt-oss:20b"])
         self.assertEqual(result["escalated_to"], "gpt-oss:20b")
         self.assertTrue(result["answer"].startswith("النموذج الخفيف (qwen3:8b)"))

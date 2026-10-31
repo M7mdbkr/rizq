@@ -16,7 +16,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from .reply import language as reply_lang
+from .reply import language as reply_lang, smalltalk as reply_smalltalk
 from . import code_agent, confidence, copilot, export, fill, importer, memory, models, payments, permissions, rizq, schedule, security, skills, triage, zatca
 
 ROOT = pathlib.Path(os.environ.get("RIZQ_ASSET_RUNTIME", str(pathlib.Path(__file__).resolve().parents[1])))
@@ -706,6 +706,13 @@ class Handler(BaseHTTPRequestHandler):
                 # question and garbled figures. So the model is used only where the
                 # rules genuinely run out -- which is decision D6/D13, not a shortcut.
                 # RIZQ_FORCE_MODEL=1 overrides, for comparing the two paths.
+                small = reply_smalltalk(message)
+                if small:
+                    memory.append_exchange(user_id, message, small, conv)
+                    self.send_json({"session": str(body.get("session", "")), "answer": small, "provider": "rules",
+                                    "model": "", "actions": []})
+                    tools.db.close()
+                    return
                 verdict = triage.classify(message)
                 force = os.environ.get("RIZQ_FORCE_MODEL") == "1"
                 with AI_SETTINGS_LOCK:
@@ -753,6 +760,7 @@ class Handler(BaseHTTPRequestHandler):
                             state = {"user_id": user_id, "brain": brain, "provider": selected_provider,
                                      "settings_version": version, "lock": threading.Lock()}
                             LOCAL_SESSIONS[sid] = state
+                    started = time.time()
                     with state["lock"]:
                         try:
                             answer = copilot.ask(state["brain"], tools, message, on_event=lambda _: None)
@@ -767,7 +775,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not verdict.approved:
                         # Not good enough to present as fact. Try a larger model once
                         # before giving up; the owner asked for exactly this ladder.
-                        bigger = confidence.bigger_model(used, models.runnable(confidence.installed_models())) if state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False) and not isinstance(state["brain"], copilot.ClaudeBrain) else None
+                        bigger = confidence.bigger_model(used, models.quick(confidence.installed_models())) if time.time() - started < 45 and state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False) and not isinstance(state["brain"], copilot.ClaudeBrain) else None
                         if bigger:
                             try:
                                 # Same tools, so the retry reads the same snapshot under
@@ -786,7 +794,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not verdict.approved:
                         answer = (answer or "").rstrip() + "\n" + verdict.note_ar()
                         if not bigger and state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False):
-                            answer += "\nما فيه نموذج أكبر محمّل يتحمله جهازك. تقدر تنزّل واحد من إعدادات المساعد ← النماذج المجانية."
+                            answer += ("\nأخذ وقت طويل، فما حوّلته لنموذج أكبر." if time.time() - started >= 45 else
+                                       "\nما فيه نموذج أكبر محمّل يتحمله جهازك. تقدر تنزّل واحد من إعدادات المساعد ← النماذج المجانية.")
                     memory.append_exchange(user_id, message, answer, conv)
                     self.send_json({"session": sid, "answer": answer, "provider": state["brain"].name,
                                     "model": escalated_to or used,

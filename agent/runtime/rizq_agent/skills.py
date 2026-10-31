@@ -93,6 +93,26 @@ def _top_compute(db, p):
     return {"top": [[r[0], r[1]] for r in rows]}
 
 
+def _customers_compute(db, p):
+    cut = (_latest(db).date() - timedelta(days=p["days"])).isoformat()
+    rows = db.execute("SELECT COALESCE(NULLIF(MAX(customer_name),''), customer_phone), COUNT(*), ROUND(SUM(final_total),2) FROM orders "
+                      "WHERE status='completed' AND COALESCE(customer_phone,'')<>'' AND date(created_at) > ? "
+                      "GROUP BY customer_phone ORDER BY 3 DESC, 1 LIMIT ?", (cut, int(p["n"]))).fetchall()
+    return {"top": [[r[0], r[1], r2(r[2])] for r in rows]}
+
+
+def _customers_check(db, p):
+    cut = _latest(db).date() - timedelta(days=p["days"])
+    spent: dict = {}
+    for o in _completed(db):
+        phone = o["customer_phone"] or ""
+        if phone and _day(o["created_at"]) > cut:
+            name, n, total = spent.get(phone, ("", 0, 0.0))
+            spent[phone] = (max(name, o["customer_name"] or ""), n + 1, total + o["final_total"])
+    ranked = sorted(((name or phone, n, r2(t)) for phone, (name, n, t) in spent.items()), key=lambda x: (-x[2], x[0]))
+    return {"top": [list(x) for x in ranked[: int(p["n"])]]}
+
+
 def _top_check(db, p):
     cut = _latest(db).date() - timedelta(days=p["days"])
     ok = {o["id"] for o in _completed(db) if _day(o["created_at"]) > cut}
@@ -207,6 +227,10 @@ SKILLS: dict[str, Skill] = {s.name: s for s in [
           _low_stock_compute, _low_stock_check, {},
           ["الأصناف المفعّلة اللي كميتها أقل من حد التنبيه"]),
     Skill("inventory_value", "قيمة المخزون", r"inventory|stock value|مخزون", _inv_compute, _inv_check, {}, []),
+    # Before top_products: "مين أكثر مشتري من العملاء" was answered with products.
+    Skill("top_customers", "أكثر العملاء شراءً", r"(?=.*(top|best|most|أكثر|اكثر|اكتر|أفضل|افضل|أعلى|اعلى|أكبر|اكبر))(?=.*(customer|عميل|عملاء|زبون|زباين|زبائن|مشتري))",
+          _customers_compute, _customers_check, {"days": (int, 30, "كم يوم؟"), "n": (int, 3, "كم عميل؟")},
+          ["العملاء اللي سجّلوا رقم جوال فقط"]),
     Skill("top_products", "الأكثر مبيعًا", r"top|best|أكثر|اكثر|اكتر|الأعلى", _top_compute, _top_check,
           {"days": (int, 30, "كم يوم؟"), "n": (int, 3, "كم صنف؟")}, []),
     Skill("sales_period", "مبيعات فترة", r"sales|revenue|income|مبيع|دخل|إيراد|ايراد", _sales_compute, _sales_check,

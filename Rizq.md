@@ -249,6 +249,19 @@ asked for — export the file, hand it back, get it filled from the database.
   confirm, add cashier, duplicate PIN refused, CSV import (1 added, 2 existing skipped), conversation listed.
 - Tests: 335 (see suite).
 
+### C-9. "The agent is not responding" (31 Oct 2026, ~19:30-19:45)
+- Root cause (desktop audit log + `ollama ps`): a discount request failed the confidence gate on qwen3:8b and was
+  escalated straight to the largest installed model, qwen3.6:27b (17 GB on a 24 GB Mac); it ran for minutes and
+  never answered. Fixes: the ladder goes one step up only; escalation skips models over half the RAM
+  (`models.quick`); no escalation after 45 s; each model call times out at 120 s; a whole answer is capped at 90 s
+  with a plain message; Qwen3 runs with `/no_think` in chat.
+- "Top customers" was answered with top products: new `top_customers` skill with its own checker, matched only
+  for top/most wording ("how many customers" still escalates).
+- Discount wording ("سويلي خصم") is handled by the local bot; greetings and thanks get an instant templated reply.
+- The desktop app was set by the owner (19:36) to `qwen3.5:0.8b`, the weakest model; left as chosen.
+- Live check on the desktop server: greeting, sales today, top customers, low stock all answered in 0.0 s.
+- Tests: 339.
+
 ### D. Where things stand / what is in progress
 - Tests: **267/267 pass** (31 Oct, ~15:00), including 26 scenario tests, the confidence gate and the scheduler. Earlier counts are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.
@@ -376,7 +389,7 @@ Fixtures (real exports): `agent/runtime/fixtures/rizq_dev.sqlite` (477 orders) a
 |---|---|---|
 | Chat in Arabic/English; brains: Claude, Ollama, OpenAI-compatible, or built-in rules | `copilot.py` | safety is enforced by the TOOLS, not by the prompt |
 | **Triage**: every request becomes answer / repair / build / escalate / refuse. Dangerous words are checked first | `triage.py` | "delete", PIN/password, prompt injection, "set total to N", out-of-scope -> refuse, no tool runs |
-| **Skills** with a maker + independent checker: `sales_period`, `vat_collected`, `inventory_value`, `low_stock`, `profit_estimate`, `top_products`, `zakat_estimate` | `skills.py` | the answer is given only if both computations agree; otherwise the agent escalates instead of guessing |
+| **Skills** with a maker + independent checker: `sales_period`, `vat_collected`, `inventory_value`, `low_stock`, `profit_estimate`, `top_products`, `top_customers`, `zakat_estimate` | `skills.py` | the answer is given only if both computations agree; otherwise the agent escalates instead of guessing |
 | **Zakat estimate**: asks the owner for cash/bank, receivables, liabilities (Rizq does not store them); Hijri 2.5%, Gregorian ~2.5777% (2.5 x 365/354); optional nisab; always lists assumptions and says "confirm with ZATCA or an accountant" | `skills.py` | estimate, not a filing |
 | **Build a new skill** (`build_skill`): two differently written SELECTs must return the same rows; installed only after the human types yes; later runs need no model | `skills.py` | SELECT-only, writes/PRAGMA/ATTACH rejected, same query twice rejected |
 | Scan the real database (13 error kinds, section 6) | `rizq.py` | original file opened read-only; work happens on a copy |
@@ -395,6 +408,7 @@ Owner requests the agent answers today (Arabic dialects + English):
 | «المخزون الناقص» · «وش ناقص عندي؟» | low_stock |
 | «كم ربحي آخر 30 يوم؟» | profit_estimate |
 | «ايش أكثر صنف انباع؟» | top_products |
+| «مين أكثر مشتري من العملاء؟» | top_customers |
 | «كم زكاتي؟» (then cash/liabilities) | zakat_estimate |
 | anything else that is a data question | build_skill (needs a model) |
 

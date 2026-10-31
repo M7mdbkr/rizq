@@ -160,3 +160,30 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TimeBudgetTests(unittest.TestCase):
+    def test_a_slow_model_is_stopped_with_a_plain_message(self):
+        class Slow:
+            def user(self, text): pass
+            def step(self): raise AssertionError("should have stopped before another step")
+        tools = copilot.PosTools(DEV, tempfile.mkdtemp(), lambda q: False)
+        os.environ["RIZQ_ANSWER_SECONDS"] = "-1"
+        try:
+            answer = copilot.ask(Slow(), tools, "سويلي خصم", on_event=lambda e: None)
+        finally:
+            os.environ.pop("RIZQ_ANSWER_SECONDS")
+        self.assertIn("وقت طويل", answer)
+
+    def test_qwen3_runs_without_long_thinking_in_chat(self):
+        self.assertTrue(copilot.OpenAICompatBrain("http://x/v1", "qwen3:8b").msgs[0]["content"].endswith("/no_think"))
+        self.assertNotIn("/no_think", copilot.OpenAICompatBrain("http://x/v1", "llama3.1:8b").msgs[0]["content"])
+
+
+class SmallTalkTests(unittest.TestCase):
+    def test_greetings_and_thanks_get_a_warm_reply_without_a_model(self):
+        for text in ("هلا كيف حالك", "السلام عليكم", "هلا", "كيفك؟", "شكرا"):
+            self.assertTrue(reply.smalltalk(text), text)
+            self.assertTrue(re.search(r"[\u0600-\u06FF]", reply.smalltalk(text)))
+        self.assertIn("Hi", reply.smalltalk("hello, how are you?"))
+        self.assertIsNone(reply.smalltalk("هلا كم مبيعات اليوم"))       # a real question is not small talk

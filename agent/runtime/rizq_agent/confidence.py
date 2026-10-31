@@ -160,7 +160,9 @@ def bigger_model(current: str | None, installed: list) -> str | None:
     ladder = ESCALATION_MODELS
     if current in ladder:
         ladder = ladder[:ladder.index(current)]
-    for name in ladder:
+    # Nearest step up, not the biggest: jumping from 8B straight to a 27B model on a
+    # 24 GB laptop froze the assistant for minutes.
+    for name in reversed(ladder):
         if name in installed and name != current:
             return name
     return None

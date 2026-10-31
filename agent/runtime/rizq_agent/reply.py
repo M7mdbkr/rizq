@@ -185,6 +185,35 @@ def fallback(question: str, outputs) -> str:
             "Try asking another way, for example about sales, VAT or stock.")
 
 
+_GREETING = re.compile(r"^\s*(هلا|هلا والله|اهلا|أهلا|مرحبا|مرحبًا|السلام عليكم|سلام|صباح الخير|مساء الخير|hi|hello|hey|good (morning|evening))"
+                       r"[\s!.,،؟?]*(كيف حالك|كيفك|شلونك|how are you)?[\s!.,،؟?]*$", re.I)
+_HOW = re.compile(r"^\s*(كيف حالك|كيفك|شلونك|وش اخبارك|how are you)[\s!.,،؟?]*$", re.I)
+_THANKS = re.compile(r"^\s*(شكرا|شكرًا|مشكور|يعطيك العافية|تسلم|thanks|thank you)[\s!.,،؟?]*$", re.I)
+
+
+def smalltalk(message: str) -> str | None:
+    """Greetings and thanks get a warm, instant reply: no model, nothing to get wrong."""
+    en = language(message) == "en"
+    if _THANKS.match(message):
+        return "You're welcome! Anything else?" if en else "العفو، حاضرين! تبي شيء ثاني؟"
+    if _GREETING.match(message) or _HOW.match(message):
+        if en:
+            return "Hi! I'm doing well. Ask me about today's sales, stock or discounts, or use the quick actions above."
+        hello = "وعليكم السلام! " if "السلام" in message else "هلا والله! "
+        return hello + "تمام الحمد لله. اسألني عن مبيعات اليوم أو المخزون أو الخصومات، أو استخدم الاختيارات السريعة فوق."
+    return None
+
+
+def too_slow(question: str, tools=None) -> str:
+    """The model took too long: give whatever was verified so far, or say so plainly."""
+    verified = _verified_answer(question, getattr(tools, "outputs", None) or [])
+    if verified:
+        return verified
+    if language(question) == "en":
+        return "That took too long, so I stopped instead of keeping you waiting. Try a shorter question or use the quick actions."
+    return "أخذ الطلب وقت طويل فوقفت بدل ما أخليك تنتظر. جرّب سؤال أقصر أو استخدم الاختيارات السريعة."
+
+
 def step_budget(question: str) -> str:
     if language(question) == "ar":
         return "وقفت لأن الطلب احتاج خطوات كثيرة بدون نتيجة واضحة، بدل ما أدوّر بدون نهاية. اسألني بشكل أدق وأساعدك."

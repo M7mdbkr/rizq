@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sqlite3
+import time
 import urllib.request
 from collections import Counter
 from dataclasses import asdict
@@ -358,7 +359,10 @@ class OpenAICompatBrain:
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model, self.key = model, key
         self.paid = paid
-        self.msgs: list = [{"role": "system", "content": SYSTEM}]
+        # Qwen3 "thinks" at length before every step (80 s for a two-line reply here);
+        # its documented /no_think switch turns that off. Other models ignore the line.
+        system = SYSTEM + ("\n/no_think" if model.lower().startswith("qwen3") else "")
+        self.msgs: list = [{"role": "system", "content": system}]
         self.tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                          "parameters": t["input_schema"]}} for t in TOOLS]
 
@@ -377,7 +381,8 @@ class OpenAICompatBrain:
             body["tools"] = self.tools
         req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
                                      headers={"Authorization": f"Bearer {self.key}", "content-type": "application/json"})
-        with urllib.request.urlopen(req, timeout=300) as r:
+        # A reply the owner waits for: a stuck model must fail, not hang the assistant.
+        with urllib.request.urlopen(req, timeout=float(os.environ.get("RIZQ_MODEL_TIMEOUT", "120"))) as r:
             msg = json.loads(r.read())["choices"][0]["message"]
         self.msgs.append({k: v for k, v in msg.items() if k in ("role", "content", "tool_calls")})
         calls = []
@@ -591,7 +596,12 @@ def ask(brain, tools: PosTools, question: str, on_event=print) -> str:
         on_event(f"  ⛔ refused before the model: {verdict['why']}")
         return refusal_text(verdict, question)
     brain.user(question)
+    started = time.time()
+    budget = float(os.environ.get("RIZQ_ANSWER_SECONDS", "90"))
     for _ in range(MAX_STEPS):
+        if time.time() - started > budget:
+            on_event("  ⚠ answer time budget reached")
+            return reply.too_slow(question, tools)
         r = brain.step()
         if not r["calls"]:
             return reply.finish(r["text"], question, tools, on_event)

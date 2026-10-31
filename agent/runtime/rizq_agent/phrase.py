@@ -77,6 +77,17 @@ def _low_stock(v: dict) -> str:
     return "\n".join(lines)
 
 
+def _customers(v: dict) -> str:
+    rows = v.get("top") or []
+    if not rows:
+        return "ما فيه عملاء مسجلين بأرقام جوال في هذه الفترة."
+    lines = ["أكثر العملاء شراءً:"]
+    for i, row in enumerate(rows, 1):
+        name, orders, total = (list(row) + [None, None])[:3]
+        lines.append(f"  {i}. {name}: {money(total)} من {count(orders)} طلب")
+    return "\n".join(lines)
+
+
 def _top(v: dict) -> str:
     rows = v.get("top") or []
     if not rows:
@@ -110,6 +121,7 @@ PHRASERS = {
     "inventory_value": _inventory,
     "low_stock": _low_stock,
     "top_products": _top,
+    "top_customers": _customers,
     "profit_estimate": _profit,
     "zakat_estimate": _zakat,
 }
