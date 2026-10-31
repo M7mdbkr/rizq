@@ -1,0 +1,54 @@
+{
+ "project": "Rizq",
+ "available": [
+  {
+   "id": "model_chat",
+   "feature": "Ask a local LLM about POS data",
+   "status": "implemented",
+   "limitations": "Requires local server and installed Ollama model; results should be verified."
+  },
+  {
+   "id": "reports",
+   "feature": "Sales, VAT, top products, inventory, profit and zakat estimates",
+   "status": "implemented",
+   "limitations": "Estimates and reports are not tax filings."
+  },
+  {
+   "id": "scan",
+   "feature": "Detect inconsistent orders, stock, customer totals and ledger records",
+   "status": "implemented",
+   "limitations": "Some findings require human investigation; ledger repair needs further regression testing."
+  },
+  {
+   "id": "reviewed_code",
+   "feature": "Generate a single-file code proposal for admin review",
+   "status": "implemented_pending_setup",
+   "limitations": "Requires separate code-admin setup, a server restart, model availability, and review. Files are size-limited; compiled POS source is unavailable."
+  },
+  {
+   "id": "owner_actions",
+   "feature": "Propose supported price, stock and settings changes",
+   "status": "existing_cashier_actions",
+   "limitations": "Derived-data repairs require BOTH a server-verified owner role and an explicit per-message approval. Workers are refused at the tool boundary and every allowed and denied call is written to data/audit.jsonl."
+  },
+  {
+   "id": "permissions",
+   "feature": "Server-enforced owner/worker roles for the agent",
+   "status": "implemented",
+   "limitations": "Role comes from a PIN checked server-side against the cashier users table, and the policy is enforced in PosTools.call plus every HTTP data endpoint. A PIN is the only factor, the POS still stores PINs in clear text (P-4), and sessions live in server memory so a restart logs everyone out."
+  }
+ ],
+ "planned": [
+  "Multi-factor / hashed PIN storage in the POS source (P-4)",
+  "Persistent agent memory",
+  "Apply verified repairs to the live database",
+  "Full feature development and validation",
+  "ZATCA FATOORA onboarding and compliant invoices",
+  "Day close",
+  "Restock suggestions",
+  "WhatsApp orders",
+  "Multi-branch synchronization"
+ ],
+ "cost": "Local Ollama models can run without a paid API. External services may have their own terms and charges.",
+ "license": "Project license and third-party distribution rights are not yet established. Do not claim the complete application is open source."
+}

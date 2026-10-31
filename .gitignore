@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Local runtime state — never committed
+agent/runtime/.env
+agent/runtime/data/
+agent/runtime/results/*.sqlite
+
+# Backups written by the POS bundle patch script
+rizq-pos/assets/*.bak
+rizq-pos/*.bak

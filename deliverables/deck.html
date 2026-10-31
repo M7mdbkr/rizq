@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rizq Agent — HUMAIN Future AI Builders Hackathon</title>
+<style>
+  @font-face{font-family:Tajawal;src:url('Tajawal-Regular.ttf') format('truetype');font-weight:400}
+  @font-face{font-family:Tajawal;src:url('Tajawal-Bold.ttf') format('truetype');font-weight:700}
+  :root{
+    --ink:#0d1210; --ink2:#141a17; --gold:#d4af37; --gold-soft:#e6cf86;
+    --green:#79aa82; --light:#e8eae6; --muted:#9aa49d; --line:rgba(212,175,55,.22);
+    --danger:#e06c5a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @page{size:13.333in 7.5in;margin:0}
+  html,body{background:var(--ink)}
+  body{font-family:Tajawal,system-ui,sans-serif;color:var(--light);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .slide{
+    width:13.333in;height:7.5in;padding:.62in .78in;position:relative;
+    page-break-after:always;break-after:page;overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 100% 0%, rgba(212,175,55,.09) 0%, transparent 55%),
+      radial-gradient(90% 80% at 0% 100%, rgba(121,170,130,.07) 0%, transparent 55%),
+      var(--ink);
+    display:flex;flex-direction:column;
+  }
+  .slide:last-child{page-break-after:auto;break-after:auto}
+  .num{position:absolute;right:.62in;bottom:.42in;font-size:11pt;color:var(--muted);letter-spacing:.06em}
+  .tag{position:absolute;left:.78in;bottom:.42in;font-size:10pt;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .eyebrow{font-size:11pt;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:.12in}
+  h1{font-size:40pt;font-weight:700;line-height:1.08;letter-spacing:-.01em}
+  h2{font-size:27pt;font-weight:700;line-height:1.14;margin-bottom:.1in}
+  .sub{font-size:14.5pt;color:var(--muted);line-height:1.5;max-width:10.4in}
+  .rule{height:2px;width:1.5in;background:linear-gradient(90deg,var(--gold),transparent);margin:.16in 0 .22in}
+  .body{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:.42in}
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:.3in}
+  .cols4{display:grid;grid-template-columns:repeat(4,1fr);gap:.24in}
+  .card{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:.26in .3in}
+  .card h3{font-size:14pt;color:var(--gold-soft);font-weight:700;margin-bottom:.1in}
+  .card p{font-size:12pt;color:var(--muted);line-height:1.5}
+  ul{list-style:none}
+  li{font-size:14pt;line-height:1.62;padding-left:.3in;position:relative;margin-bottom:.07in}
+  li:before{content:"";position:absolute;left:0;top:.11in;width:7px;height:7px;border-radius:2px;background:var(--gold)}
+  li.g:before{background:var(--green)}
+  li.r:before{background:var(--danger)}
+  li b{color:var(--light)}
+  li span{color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.26in;margin-bottom:.24in}
+  .kpi{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:.24in;text-align:center}
+  .kpi .v{font-size:30pt;font-weight:700;color:var(--gold);line-height:1}
+  .kpi .l{font-size:10.5pt;color:var(--muted);margin-top:.08in;line-height:1.35}
+  table{width:100%;border-collapse:collapse;font-size:12pt}
+  th{text-align:left;font-weight:400;color:var(--gold);font-size:10.5pt;letter-spacing:.07em;
+     text-transform:uppercase;padding:.1in .14in;border-bottom:1px solid var(--line)}
+  td{padding:.1in .14in;border-bottom:1px solid rgba(255,255,255,.055);color:var(--light)}
+  td.m{color:var(--muted)}
+  td.good{color:var(--green);font-weight:700}
+  td.bad{color:var(--danger)}
+  tr.hero td{background:rgba(212,175,55,.07);font-weight:700}
+  .ar{direction:rtl;unicode-bidi:isolate;font-size:13.5pt}
+  .flow{display:flex;align-items:stretch;gap:.14in;margin-top:.1in}
+  .step{flex:1;background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:.22in}
+  .step .n{font-size:10pt;color:var(--gold);letter-spacing:.14em}
+  .step h4{font-size:13pt;margin:.07in 0;color:var(--light)}
+  .step p{font-size:11pt;color:var(--muted);line-height:1.45}
+  .arrow{display:flex;align-items:center;color:var(--gold);font-size:17pt}
+  .note{font-size:11pt;color:var(--muted);line-height:1.45;margin-top:.18in;
+        border-left:2px solid var(--line);padding-left:.18in}
+  .title-wrap{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .meta{display:flex;gap:.5in;margin-top:.42in;font-size:12.5pt;color:var(--muted)}
+  .meta b{color:var(--gold-soft);display:block;font-size:10pt;letter-spacing:.12em;
+          text-transform:uppercase;margin-bottom:.05in}
+  .mark{position:absolute;top:.55in;right:.78in;display:flex;align-items:center;gap:.12in;
+        border:1px solid var(--line);border-radius:10px;padding:.09in .16in}
+  .mark .r{font-size:17pt;font-weight:700;color:var(--gold)}
+  .mark .t{font-size:8.5pt;color:var(--muted);letter-spacing:.1em;line-height:1.3}
+  .warn{color:var(--danger);font-weight:700}
+  .ok{color:var(--green);font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- 1 OVERVIEW -->
+<section class="slide">
+  <div class="mark"><span class="r">ر</span><span class="t">RIZQ<br>AGENT</span></div>
+  <div class="title-wrap">
+    <p class="eyebrow">Challenge 3 · Autonomous Enterprise</p>
+    <h1>Rizq Agent:<br>the POS that builds<br>its own features</h1>
+    <div class="rule"></div>
+    <p class="sub">A restaurant owner describes a problem in their own Arabic dialect.
+      The agent answers with exact numbers, repairs broken derived data, builds a new verified
+      capability, or escalates with evidence — without the developer touching the code.</p>
+    <div class="meta">
+      <div><b>Builder</b>Mohammed Bakr · Computer Engineering, Taif University</div>
+      <div><b>Product</b>Rizq — a real Saudi restaurant POS, in use</div>
+      <div><b>Cost to run</b>0 SAR · free local model</div>
+    </div>
+  </div>
+  <span class="tag">Overview</span><span class="num">1 / 9</span>
+</section>
+
+<!-- 2 PROBLEM -->
+<section class="slide">
+  <p class="eyebrow">The problem</p>
+  <h2>A POS that cannot adapt turns every need<br>into a developer ticket — and hides its own errors</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <ul>
+          <li><b>Every new need waits on a developer.</b> <span>A zakat estimate, a custom report, numbers
+            that do not add up — days of waiting and extra cost for a small restaurant.</span></li>
+          <li><b>Errors are silent.</b> <span>Four of five failure classes we studied produce no error
+            message at all. Nothing in the logs. The owner finds out from the money.</span></li>
+          <li class="r"><b>Found in our own POS, not a hypothetical.</b></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Real defects found in the shipping Rizq build</h3>
+        <p style="margin-bottom:.14in"><span class="warn">BUG-1 · high.</span> On a fresh install, a mada
+          card checkout silently produces no order, no receipt and no message. Console:
+          <i>CHECK constraint failed: payment_method</i>. The migration only runs when an existing database
+          loads. A database scan cannot see this dropped order.</p>
+        <p style="margin-bottom:.14in"><span class="warn">Items screen · this build.</span> The inventory
+          list was ordered newest-first with no grouping, and deleting a section silently orphaned its
+          items because foreign keys were never enabled — while the UI still reported success.</p>
+        <p><span class="warn">Daily false alarm.</span> The agent's own scanner compared local POS
+          timestamps against UTC, escalating every legitimate order from the past two hours as a clock
+          fault. All three are fixed and covered by tests.</p>
+      </div>
+    </div>
+  </div>
+  <span class="tag">Problem</span><span class="num">2 / 9</span>
+</section>
+
+<!-- 3 SOLUTION -->
+<section class="slide">
+  <p class="eyebrow">The solution</p>
+  <h2>One agent, four honest outcomes</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols4">
+      <div class="card"><h3>1 · Answer</h3><p>Exact numbers from the owner's own data. Every figure is
+        produced twice — by a maker query and an <b style="color:var(--gold-soft)">independently written
+        checker</b>. If they disagree, the agent gives <b style="color:var(--gold-soft)">no number</b>
+        and escalates.</p></div>
+      <div class="card"><h3>2 · Repair</h3><p>Rebuilds <b style="color:var(--gold-soft)">derived data
+        only</b> — line totals, stock movements, customer totals, the day-book — on a copy, with a
+        dry-run and an audit trail, then re-verifies.</p></div>
+      <div class="card"><h3>3 · Build</h3><p>A capability no skill covers becomes a new
+        <b style="color:var(--gold-soft)">read-only skill</b>, installed only after two differently
+        written queries agree and a human approves. Learned once, then instant.</p></div>
+      <div class="card"><h3>4 · Escalate / refuse</h3><p>Money on an issued ZATCA invoice, lost orders,
+        deletions, secrets, prompt injection — handed back with evidence or refused
+        <b style="color:var(--gold-soft)">before the model is ever called</b>.</p></div>
+    </div>
+    <div class="note">The owner's example that defined the project:
+      <span class="ar">«اربط الزكاة بالدخل»</span> — link zakat to income — answered from the real
+      database without the developer writing a line of code.</div>
+  </div>
+  <span class="tag">Solution</span><span class="num">3 / 9</span>
+</section>
+
+<!-- 4 TECHNICAL APPROACH -->
+<section class="slide">
+  <p class="eyebrow">Technical approach</p>
+  <h2>A replaceable brain, and hands that enforce the rules</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="flow">
+      <div class="step"><p class="n">BRAIN</p><h4>Any LLM, or none</h4>
+        <p>Local Ollama (free, offline), Claude, any OpenAI-compatible endpoint, or a deterministic
+          rules brain. The model <b style="color:var(--gold-soft)">chooses</b> tools; it never gets to
+          change what they allow.</p></div>
+      <div class="arrow">→</div>
+      <div class="step"><p class="n">HANDS · 13 TOOLS</p><h4>Safety lives here</h4>
+        <p>Source database opened read-only and copied. SQL is SELECT-only, enforced with
+          <i>PRAGMA query_only</i>. Writes touch derived data only, after a human confirms.
+          Credentials are unreadable to the agent.</p></div>
+      <div class="arrow">→</div>
+      <div class="step"><p class="n">VERIFY</p><h4>Prove it, then claim it</h4>
+        <p>The same business invariants re-run after every repair. "Recovered" is only said when the
+          auto findings are gone and no new finding appeared.</p></div>
+      <div class="arrow">→</div>
+      <div class="step"><p class="n">ROLES · AUDIT</p><h4>Who may ask what</h4>
+        <p>A PIN is checked <b style="color:var(--gold-soft)">on the server</b> against the POS users
+          table. Deny-by-default role policy, enforced in the hands. Every allowed and denied call is
+          written to an append-only audit log.</p></div>
+    </div>
+    <div class="note"><b style="color:var(--light)">Key design decision:</b> detect with
+      <b style="color:var(--gold-soft)">business invariants</b>, not by reading logs. Log-only detection
+      scored 10% success with 100% false alarms on the held-out set (slide 6). Rules are the main path;
+      the model is used where rules run out — so the system is reproducible and costs nothing to run.</div>
+  </div>
+  <span class="tag">Technical approach</span><span class="num">4 / 9</span>
+</section>
+
+<!-- 5 IMPLEMENTATION -->
+<section class="slide">
+  <p class="eyebrow">Implementation</p>
+  <h2>What is actually built and running</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <ul>
+          <li class="g"><b>Rizq POS</b> <span>— React/TypeScript, SQLite in the browser (sql.js),
+            Arabic RTL, VAT 15%, ZATCA-style QR receipts. A real product, not a demo shell.</span></li>
+          <li class="g"><b>Rizq Agent</b> <span>— Python standard library only, no framework and no
+            paid dependency. 13 whitelisted tools, 6 verified built-in skills, learned skills on top.</span></li>
+          <li class="g"><b>Role enforcement</b> <span>— server-side PIN login, opaque expiring tokens,
+            owner-only data endpoints, append-only audit log.</span></li>
+          <li class="g"><b>Runs free and offline</b> <span>— Qwen3.5 0.8B / Qwen3 8B via Ollama. No API
+            key required. Claude is supported if a key is supplied.</span></li>
+          <li><b>The compiled-source constraint</b> <span>— the POS React source was unavailable, so UI
+            defects were fixed by idempotent, reversible patches to the shipped bundle, each with a
+            backup and a dry-run mode.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
+          <div class="kpi"><div class="v">147</div><div class="l">automated tests, all passing</div></div>
+          <div class="kpi"><div class="v">0</div><div class="l">unsafe writes, every evaluation</div></div>
+        </div>
+        <div class="card">
+          <h3>Safety properties enforced in code, not prompts</h3>
+          <p>· The original database file is never modified — verified by hash in the tests.<br>
+             · Money on an issued tax invoice is never edited; it escalates for a credit/debit note.<br>
+             · Data is never deleted.<br>
+             · PINs and tokens are never returned or logged.<br>
+             · Destructive or injected requests are refused <i>before</i> the model is called.<br>
+             · A worker cannot reach owner tools even if the model asks for them.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="tag">Implementation</span><span class="num">5 / 9</span>
+</section>
+
+<!-- 6 TESTING & RESULTS -->
+<section class="slide">
+  <p class="eyebrow">Testing &amp; results</p>
+  <h2>Held-out, run once, never tuned against</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="kpis">
+      <div class="kpi"><div class="v">90.0%</div><div class="l">owner-request action accuracy<br>(held-out, n=30)</div></div>
+      <div class="kpi"><div class="v">99.0%</div><div class="l">real-database success<br>212 planted mistakes</div></div>
+      <div class="kpi"><div class="v">100%</div><div class="l">simulator success<br>300 shifted scenarios</div></div>
+      <div class="kpi"><div class="v">0</div><div class="l">unsafe writes ·<br>0 spurious findings</div></div>
+    </div>
+    <div class="cols">
+      <div>
+        <table>
+          <tr><th>Held-out owner requests</th><th>Result</th></tr>
+          <tr><td class="m">Answers vs independent reference SQL</td><td class="good">11 / 11</td></tr>
+          <tr><td class="m">Dangerous requests refused</td><td class="good">6 / 6</td></tr>
+          <tr><td class="m">Legitimate requests wrongly refused</td><td class="bad">1</td></tr>
+          <tr><td class="m">Unsafe writes</td><td class="good">0</td></tr>
+          <tr><td class="m">Original database unchanged</td><td class="good">yes</td></tr>
+          <tr><td class="m">Same set, local 0.8B model instead of rules</td><td class="bad">40.0%</td></tr>
+        </table>
+        <div class="note"><b style="color:var(--light)">100% dev → 90% held-out.</b> All three misses are
+          keyword matching without Arabic normalisation — reported,
+          <b style="color:var(--light)">not fixed against this set</b>.</div>
+      </div>
+      <div>
+        <table>
+          <tr><th>Ablation (held-out, n=300)</th><th>Success</th><th>False "recovered"</th></tr>
+          <tr class="hero"><td>Rizq Agent (full)</td><td class="good">100.0%</td><td class="good">0</td></tr>
+          <tr><td class="m">without verification</td><td class="bad">64.0%</td><td class="bad">73</td></tr>
+          <tr><td class="m">logs only, no invariants</td><td class="bad">10.0%</td><td class="bad">10</td></tr>
+          <tr><td class="m">restart every time</td><td class="bad">0.0%</td><td class="bad">194</td></tr>
+          <tr><td class="m">without retry budget</td><td>100.0%</td><td>0</td></tr>
+        </table>
+        <div class="note"><b style="color:var(--light)">What the ablations prove:</b> verification carries
+          the result — removing it costs 36 points and 73 false "recovered" claims. Log-based detection
+          collapses entirely. And the 0.8B model scores 40% yet still refused 6/6 dangerous requests with
+          0 unsafe writes — <b style="color:var(--light)">safety is in the tools, not the model</b>.</div>
+      </div>
+    </div>
+  </div>
+  <span class="tag">Testing &amp; results</span><span class="num">6 / 9</span>
+</section>
+
+<!-- 7 INNOVATION & VALUE -->
+<section class="slide">
+  <p class="eyebrow">Innovation &amp; value</p>
+  <h2>The owner changes the system. The developer is not in the loop.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols3">
+      <div class="card"><h3>Verified self-extension</h3><p>The agent writes a capability it did not have,
+        and a <b style="color:var(--gold-soft)">second, independently written query must agree</b> before
+        it is installed. Self-extension without self-certification is just a guess; this is the
+        difference.</p></div>
+      <div class="card"><h3>It gets cheaper as it learns</h3><p>A learned skill answers from stored SQL
+        with <b style="color:var(--gold-soft)">no model call at all</b>. The system's running cost falls
+        as the restaurant asks more questions — and it already runs on a free local model.</p></div>
+      <div class="card"><h3>Refusal as a feature</h3><p>A wrong confident number costs a restaurant real
+        money and a wrong VAT figure is a legal problem. The agent is built to say
+        <b style="color:var(--gold-soft)">"I will not answer that"</b> and hand over evidence.</p></div>
+    </div>
+    <div class="cols" style="margin-top:.3in">
+      <div class="card"><h3>Value proven on a real business, not a sandbox</h3>
+        <p>Rizq is a working Saudi restaurant POS with real exported data — 477 orders in the development
+          fixture. The agent found <b style="color:var(--gold-soft)">two genuine defects in the shipping
+          product</b>, including a silent card-payment failure that produces no log line, plus a
+          false-alarm bug in its own scanner that would have fired every day in production.</p></div>
+      <div class="card"><h3>Why this is Autonomous Enterprise</h3>
+        <p>The loop that normally requires a company — notice a problem, diagnose it, fix what is safe to
+          fix, prove the fix held, refuse what needs a human, and build the missing capability — runs
+          inside the business's own software, in the owner's own dialect, at zero marginal cost.</p></div>
+    </div>
+  </div>
+  <span class="tag">Innovation &amp; value</span><span class="num">7 / 9</span>
+</section>
+
+<!-- 8 CHALLENGES & FUTURE -->
+<section class="slide">
+  <p class="eyebrow">Challenges &amp; future work</p>
+  <h2>What is not done — stated plainly</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <ul>
+          <li class="r"><b>ZATCA is not connected.</b> <span>VAT and zakat figures are local estimates.
+            Nothing is submitted to the authority. Real e-invoicing needs EGS onboarding, a CSID,
+            compliant signed XML and official sandbox validation.</span></li>
+          <li class="r"><b>Arabic normalisation.</b> <span>The three held-out misses all come from
+            regex matching without hamza/prefix normalisation. This is the highest-value next fix —
+            and it must be validated on a <i>new</i> held-out set.</span></li>
+          <li class="r"><b>Browser-local data.</b> <span>Each device holds its own SQLite. A durable
+            shared backend, automated backups and tested restores are required before multi-device
+            use.</span></li>
+        </ul>
+      </div>
+      <div>
+        <ul>
+          <li class="r"><b>PINs stored in clear text</b> <span>in the POS build (P-4). The new role layer
+            compares them in constant time and never logs them, but it cannot fix the storage without the
+            POS source.</span></li>
+          <li class="r"><b>The day-book is never written</b> <span>(P-6). The agent can rebuild it on a
+            copy, but the POS itself does not populate it, and live write-back is not implemented.</span></li>
+          <li class="r"><b>Compiled source.</b> <span>UI fixes are reversible bundle patches. They are
+            documented so they can be re-applied as proper source changes when the repository is
+            available.</span></li>
+          <li><b>Honest status</b> <span>— the agent proposes single-file code changes for admin review;
+            it does not autonomously ship production code.</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><b style="color:var(--light)">Disclosure (organizer requirement).</b>
+      Runtime models: Qwen3.5 0.8B / Qwen3 8B, run locally through Ollama (Apache 2.0 declared upstream).
+      Built with assistance from Claude (Anthropic). Font: Tajawal under the SIL Open Font License.
+      Browser database: sql.js. Simulator scenarios are synthetic and seed-generated; the Rizq database
+      fixtures are real exports from the live application. Project and third-party distribution licensing
+      are not yet settled, so the complete application is not claimed to be open source. The
+      "Made in KSA" wordmark is custom and is not an official Saudi Made certification.</div>
+  </div>
+  <span class="tag">Challenges &amp; future</span><span class="num">8 / 9</span>
+</section>
+
+<!-- 9 CONCLUSION & DEMO -->
+<section class="slide">
+  <div class="mark"><span class="r">ر</span><span class="t">RIZQ<br>AGENT</span></div>
+  <p class="eyebrow">Conclusion &amp; demo</p>
+  <h2>A restaurant owner asks in their own words.<br>The software answers, fixes itself, or says no.</h2>
+  <div class="rule"></div>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <ul>
+          <li class="g"><b>It works on real data</b> <span>— held out once and never tuned against:
+            90% action accuracy on unseen owner requests, 99% on 212 planted database faults,
+            100% on 300 shifted simulator scenarios.</span></li>
+          <li class="g"><b>It is safe by construction</b> <span>— 0 unsafe writes and 0 spurious findings
+            across every evaluation; the source database is never modified.</span></li>
+          <li class="g"><b>It is honest</b> <span>— it refuses, escalates, and reports its own
+            limits. The gaps on slide 8 are published, not hidden.</span></li>
+          <li class="g"><b>It costs nothing to run</b> <span>— a free local model, Python standard
+            library, no paid API.</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Demo &amp; code</h3>
+        <p style="font-size:13pt;line-height:1.8">
+          <b style="color:var(--gold-soft)">Demo video:</b> [link]<br>
+          <b style="color:var(--gold-soft)">Code:</b> [GitHub link]<br>
+          <b style="color:var(--gold-soft)">Run it:</b> <i>python3 -m rizq_agent web</i><br>
+          <b style="color:var(--gold-soft)">Ask it:</b> <span class="ar">«كم زكاتي؟»</span></p>
+        <p style="margin-top:.2in">Mohammed Bakr · Computer Engineering, Taif University<br>
+          HUMAIN Future AI Builders Hackathon · Challenge 3 · 31 Oct 2026</p>
+      </div>
+    </div>
+  </div>
+  <span class="tag">Conclusion &amp; demo</span><span class="num">9 / 9</span>
+</section>
+
+</body>
+</html>

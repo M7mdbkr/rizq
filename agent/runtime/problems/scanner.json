@@ -1,0 +1,106 @@
+{
+ "problems": [
+  {
+   "id": "line_total_wrong",
+   "mode": "auto",
+   "action": "line total rebuilt from unit price x quantity",
+   "scope": "working copy only"
+  },
+  {
+   "id": "item_missing",
+   "mode": "escalate",
+   "action": "an item vanished from a paid order: check the kitchen ticket / receipt copy and re-add it",
+   "scope": "human investigation"
+  },
+  {
+   "id": "order_row_lost",
+   "mode": "escalate",
+   "action": "items and stock were recorded but the order row is gone: re-create the order from the receipt; payment method unknown",
+   "scope": "human investigation"
+  },
+  {
+   "id": "order_without_items",
+   "mode": "escalate",
+   "action": "a paid order has no items: check the receipt and restore the items",
+   "scope": "human investigation"
+  },
+  {
+   "id": "vat_wrong",
+   "mode": "escalate",
+   "action": "VAT on an issued invoice is wrong: issue a ZATCA credit/debit note for the difference",
+   "scope": "human investigation"
+  },
+  {
+   "id": "final_total_wrong",
+   "mode": "escalate",
+   "action": "the charged total does not match the invoice lines: verify the payment and issue a correction note",
+   "scope": "human investigation"
+  },
+  {
+   "id": "stock_movement_missing",
+   "mode": "auto",
+   "action": "missing 'sale' stock movement restored and stock deducted",
+   "scope": "working copy only"
+  },
+  {
+   "id": "stock_movement_extra",
+   "mode": "escalate",
+   "action": "stock was deducted without a sale: check for waste, staff meals or theft",
+   "scope": "human investigation"
+  },
+  {
+   "id": "customer_drift",
+   "mode": "auto",
+   "action": "customer totals recomputed from their orders",
+   "scope": "working copy only"
+  },
+  {
+   "id": "daily_ledger_missing",
+   "mode": "auto",
+   "action": "the day was never written to the day-book (Rizq does not write daily_ledger): built from completed orders",
+   "scope": "working copy only"
+  },
+  {
+   "id": "daily_ledger_drift",
+   "mode": "auto",
+   "action": "daily ledger rebuilt from completed orders",
+   "scope": "working copy only"
+  },
+  {
+   "id": "daily_ledger_blocked",
+   "mode": "escalate",
+   "action": "ledger day includes orders under investigation; reconcile after resolving those orders",
+   "scope": "human investigation"
+  },
+  {
+   "id": "customer_drift_blocked",
+   "mode": "escalate",
+   "action": "customer totals disagree, but some of their orders are under investigation: recompute after those are resolved",
+   "scope": "human investigation"
+  },
+  {
+   "id": "duplicate_order",
+   "mode": "escalate",
+   "action": "two identical orders at the same moment: confirm with the cashier whether one is a double submit, then void it",
+   "scope": "human investigation"
+  },
+  {
+   "id": "unknown_payment_method",
+   "mode": "escalate",
+   "action": "payment method not configured in Rizq: confirm how this order was paid",
+   "scope": "human investigation"
+  },
+  {
+   "id": "future_timestamp",
+   "mode": "escalate",
+   "action": "order dated in the future: check the device clock",
+   "scope": "human investigation"
+  },
+  {
+   "id": "product_without_category",
+   "mode": "escalate",
+   "action": "an item belongs to no section: pick its section in Rizq; the agent never guesses a menu classification",
+   "scope": "human investigation"
+  }
+ ]
+}
