@@ -25,7 +25,7 @@ import urllib.request
 from collections import Counter
 from dataclasses import asdict
 
-from . import export, fill, permissions, rizq, skills, triage
+from . import export, fill, permissions, phrase, rizq, skills, triage
 from .llm import _load_key
 
 MAX_STEPS = 10
@@ -409,7 +409,7 @@ class RulesBrain:
     def results(self, pairs) -> None:
         self.outs += pairs
 
-    def _summarize(self) -> str:
+    def _summarize(self) -> str:   # noqa: C901 - a flat mapping of tool -> sentence
         ar = bool(re.search(r"[؀-ۿ]", self.last_user))
         v = getattr(self, "verdict", None)
         if v and v["action"] == triage.REFUSE:
@@ -422,10 +422,32 @@ class RulesBrain:
             if "error" in out:
                 lines.append(f"- {c['name']}: {out['error']}")
             elif c["name"] == "scan_pos":
-                lines.append((f"- الفحص: {out['total_findings']} ملاحظة ({out['auto_fixable']} تنصلح تلقائي، {out['must_escalate']} لازم لها قرارك)"
-                              if ar else f"- scan: {out['total_findings']} findings ({out['auto_fixable']} auto-fixable, {out['must_escalate']} need you)"))
-                for f in out["findings"][:6]:
-                    lines.append(f"  • {f['kind']} {f['entity']}: {f['action_ar'] if ar else f['action_en']}")
+                if ar:
+                    if not out["total_findings"]:
+                        lines.append("فحصت بياناتك وكل شيء سليم ✓")
+                    else:
+                        lines.append(f"فحصت بياناتك: {out['total_findings']} ملاحظة — "
+                                     f"{out['auto_fixable']} أقدر أصلحها على نسخة، "
+                                     f"و{out['must_escalate']} تحتاج قرارك.")
+                        # Five days with the same problem is one problem, not five
+                        # lines. Group by what the owner would actually do about it.
+                        grouped: dict = {}
+                        for f in out["findings"]:
+                            grouped.setdefault(f["action_ar"], []).append(f["entity"])
+                        shown = sum(len(v) for v in grouped.values())
+                        if shown < out["total_findings"]:
+                            lines.append(f"  (أعرض لك أول {shown} منها)")
+                        for action, who in list(grouped.items())[:5]:
+                            if len(who) == 1:
+                                lines.append(f"  • {who[0]}: {action}")
+                            else:
+                                lines.append(f"  • {len(who)} حالات — {action}")
+                                lines.append(f"      ({who[0]} … {who[-1]})")
+                else:
+                    lines.append(f"- scan: {out['total_findings']} findings "
+                                 f"({out['auto_fixable']} auto-fixable, {out['must_escalate']} need you)")
+                    for f in out["findings"][:6]:
+                        lines.append(f"  • {f['kind']} {f['entity']}: {f['action_en']}")
             elif c["name"] == "run_skill":
                 lines.append(_skill_line_impl(out, ar))
             elif c["name"] == "apply_fixes":
@@ -452,8 +474,9 @@ def _skill_line_impl(out: dict, ar: bool) -> str:
                 else "- No answer: the checker disagrees, stored numbers do not reconcile. Escalated: ") + json.dumps(
             {"maker": out.get("maker"), "checker": out.get("checker")}, ensure_ascii=False)[:300]
     if st == "ok":
-        notes = "\n".join("  * " + a for a in out.get("assumptions", []))
-        return f"- {out.get('title_ar') or out['skill']}: {json.dumps(out['value'], ensure_ascii=False)}" + ("\n" + notes if notes else "")
+        # Phrase it. Dumping the value as JSON was technically correct and unusable.
+        return phrase.skill_answer(out) if ar else (
+            f"{out.get('skill')}: {json.dumps(out['value'], ensure_ascii=False)}")
     return f"- {json.dumps(out, ensure_ascii=False)[:300]}"
 
 

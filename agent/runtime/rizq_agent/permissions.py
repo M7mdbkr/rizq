@@ -79,9 +79,8 @@ AUDIT_PATH = pathlib.Path(
 # Sessions are stored on disk, not only in memory, so that refreshing the cashier page
 # or restarting the server does not throw the user back to a PIN prompt. Only a SHA-256
 # of the token is stored: the token itself never touches the disk.
-SESSION_DB = pathlib.Path(
-    os.environ.get("RIZQ_SESSION_DB",
-                   str(pathlib.Path(__file__).resolve().parents[1] / "data" / "sessions.sqlite")))
+DEFAULT_SESSION_DB = pathlib.Path(__file__).resolve().parents[1] / "data" / "sessions.sqlite"
+SESSION_DB = pathlib.Path(os.environ.get("RIZQ_SESSION_DB", str(DEFAULT_SESSION_DB)))
 
 
 def _hash(token: str) -> str:
@@ -261,11 +260,20 @@ def logout(token: str) -> None:
 
 
 def reset_for_tests() -> None:
+    """Clear in-memory test state, and the session store ONLY if it is a test one.
+
+    This used to delete from whatever SESSION_DB pointed at. Two test files do not
+    redirect it, so running the suite wiped the real store and signed out every signed-in
+    user on the machine -- the agent then answered "enter your PIN" to someone the POS
+    was still showing as signed in. A test must never reach production state.
+    """
     from . import security          # local import keeps the module dependency one-way
     security.reset_for_tests()
     with _LOCK:
         _TOKENS.clear()
         _PIN_FAILURES.clear()
+    if SESSION_DB.resolve() == DEFAULT_SESSION_DB.resolve():
+        return                      # refuse to touch the live store
     try:
         with _session_store() as db:
             db.execute("DELETE FROM sessions")

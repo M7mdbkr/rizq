@@ -112,7 +112,7 @@ class TestBrains(unittest.TestCase):
 
     def test_rules_brain_offline(self):
         out = copilot.ask(copilot.RulesBrain(), copilot.PosTools(DEV, OUT), "افحص", on_event=lambda e: None)
-        self.assertIn("الفحص", out)
+        self.assertIn("فحصت بياناتك", out)
 
 
 if __name__ == "__main__":

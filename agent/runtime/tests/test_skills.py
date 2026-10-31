@@ -247,7 +247,7 @@ class TestRouting(unittest.TestCase):
         a = copilot.ask(copilot.RulesBrain(), t, "كم زكاتي؟", on_event=lambda *x: None)
         self.assertIn("أحتاج منك", a)
         b = copilot.ask(copilot.RulesBrain(), t, "زكاتي: نقد 50000 وديون علي 12000", on_event=lambda *x: None)
-        self.assertIn("1101.6", b)
+        self.assertIn("1,101.60", b)   # phrased with a thousands separator now
 
 
 class TestCatalogStaysInSync(unittest.TestCase):
