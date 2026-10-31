@@ -14,7 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from . import code_agent, copilot, memory, permissions, rizq, skills, triage, zatca
+from . import code_agent, copilot, export, fill, memory, permissions, rizq, security, skills, triage, zatca
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -102,6 +102,10 @@ class Handler(BaseHTTPRequestHandler):
                 return unquote(part[len("token="):])
         return ""
 
+    def guard(self, bucket: str) -> None:
+        """Rate-limit this request by client address and route class."""
+        security.limit(bucket, self.client_address[0])
+
     def actor(self, body: dict | None = None, require_owner: bool = False) -> dict:
         """Resolve the caller's verified role, or raise PermissionDenied."""
         who = permissions.session(self.request_token(body))
@@ -112,6 +116,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self._do_GET()
+        except security.RateLimited as e:
+            self.send_json({"error": str(e), "code": "rate_limited",
+                            "retry_after": e.retry_after}, 429)
+        except security.SpendCapReached as e:
+            self.send_json({"error": str(e), "code": "spend_cap"}, 402)
         except permissions.PermissionDenied as e:
             self.send_json({"error": str(e), "code": "forbidden"}, 403)
 
@@ -123,9 +132,17 @@ class Handler(BaseHTTPRequestHandler):
                 db_ok = True
             except Exception:
                 db_ok = False
-            self.send_json({"ok": True, "database": {"ready": db_ok, "name": ACTIVE_DB.name,
-                            "source": "browser export" if DB_TEMP else "fixture/default"},
-                            "providers": provider_status()})
+            # An unauthenticated caller gets liveness only. Database filenames and
+            # which providers are configured are useful to an attacker and to nobody
+            # else, so they need a signed-in session.
+            try:
+                self.actor()
+                self.send_json({"ok": True,
+                                "database": {"ready": db_ok, "name": ACTIVE_DB.name,
+                                             "source": "browser export" if DB_TEMP else "fixture/default"},
+                                "providers": provider_status()})
+            except permissions.PermissionDenied:
+                self.send_json({"ok": True, "database": {"ready": db_ok}})
             return
         if path == "/api/skills":
             learned = skills.load_learned(str(ROOT / "results" / "skills_learned.json"))
@@ -157,9 +174,32 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 db.close()
             return
+        if path == "/api/export":
+            actor = self.actor(require_owner=True)
+            self.guard("export")
+            name, blob = export.build(str(ACTIVE_DB), who=f"{actor['name']} ({actor['role']})",
+                                      audit_path=permissions.AUDIT_PATH,
+                                      memory_path=memory.PATH,
+                                      escalations_path=ROOT / "results" / "escalations.jsonl")
+            permissions.audit(actor, "export_data", allowed=True, detail={"bytes": len(blob)})
+            security.alert("data_exported", {"user_id": actor["user_id"], "bytes": len(blob)})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(blob)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(blob)
+            return
+        if path == "/api/fill/fields":
+            self.actor(require_owner=True)
+            self.send_json({"fields": fill.available_fields(),
+                            "syntax": "{{field}} or {{field:days=30}}"})
+            return
         if path == "/api/scan":
             try:
-                self.actor(require_owner=True)  # findings quote order totals and VAT
+                self.actor(require_owner=True)
+                self.guard("scan")  # findings quote order totals and VAT
                 db = rizq.open_copy(str(ACTIVE_DB))
                 try:
                     findings = rizq.scan(db)
@@ -220,6 +260,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = self.read_json()
             if path == "/api/auth/login":
+                self.guard("auth")
                 # The PIN is checked on the server against the cashier's own users
                 # table. The client never tells us who it is or what role it has.
                 raw = base64.b64decode(body.get("sqlite_base64", ""), validate=True)
@@ -230,44 +271,92 @@ class Handler(BaseHTTPRequestHandler):
                     with os.fdopen(fd, "wb") as fh:
                         fh.write(raw)
                     validate_database(pathlib.Path(filename))
+                    who = permissions.verify_pin(filename, str(body.get("pin", "")))
+                    # A second factor, when the owner has enrolled one, is checked
+                    # BEFORE any session is created.
+                    if who and security.is_2fa_enrolled(who["user_id"]):
+                        if not security.verify_2fa(who["user_id"], str(body.get("otp", ""))):
+                            permissions.audit(who, "auth.2fa", allowed=False)
+                            security.alert("repeated_auth_failure",
+                                           {"user_id": who["user_id"], "factor": "totp"})
+                            raise permissions.PermissionDenied(
+                                "رمز التحقق الثنائي غير صحيح." if body.get("otp")
+                                else "هذا الحساب يحتاج رمز التحقق الثنائي.")
                     out = permissions.login(filename, str(body.get("pin", "")),
                                             client=self.client_address[0])
                 finally:
                     pathlib.Path(filename).unlink(missing_ok=True)
                 out["allowed_tools"] = permissions.allowed_tools(out["role"])
+                out["two_factor"] = security.is_2fa_enrolled(out["user_id"])
                 self.send_json(out)
+                return
+            if path == "/api/auth/2fa/enroll":
+                actor = self.actor(body, require_owner=True)
+                self.guard("auth")
+                self.send_json(security.enroll_2fa(actor["user_id"]))
+                return
+            if path == "/api/auth/2fa/disable":
+                actor = self.actor(body, require_owner=True)
+                self.guard("auth")
+                if not security.verify_2fa(actor["user_id"], str(body.get("otp", ""))):
+                    raise permissions.PermissionDenied("أدخل رمز التحقق الحالي لإيقاف الخاصية.")
+                removed = security.disable_2fa(actor["user_id"])
+                security.alert("2fa_disabled", {"user_id": actor["user_id"]})
+                self.send_json({"ok": True, "was_enrolled": removed})
+                return
+            if path == "/api/alerts":
+                self.actor(body, require_owner=True)
+                self.send_json({"alerts": security.recent_alerts(int(body.get("limit", 50)))})
                 return
             if path == "/api/auth/logout":
                 permissions.logout(str(body.get("token", "")))
                 self.send_json({"ok": True})
                 return
             if path == "/api/auth/whoami":
-                actor = permissions.session(str(body.get("token", "")))
+                actor = self.actor(body)
                 self.send_json({**actor, "allowed_tools": permissions.allowed_tools(actor["role"])})
                 return
             if path == "/api/audit":
-                actor = permissions.session(str(body.get("token", "")))
-                if actor["role"] != "owner":
-                    raise permissions.PermissionDenied(
-                        permissions.denial_message(actor["role"], "audit_log"))
+                actor = self.actor(body, require_owner=True)
                 self.send_json({"entries": permissions.read_audit(int(body.get("limit", 50)))})
+                return
+            if path == "/api/fill":
+                self.guard("fill")
+                actor = self.actor(body, require_owner=True)
+                text = body.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("أرسل نص المستند المراد تعبئته")
+                if len(text) > 500_000:
+                    raise ValueError("المستند أكبر من الحد المسموح (500 كيلوبايت نص)")
+                db = rizq.open_copy(str(ACTIVE_DB))
+                try:
+                    result = fill.fill(db, text)
+                finally:
+                    db.close()
+                permissions.audit(actor, "fill_template", allowed=True,
+                                  detail={"filled": result["filled_count"],
+                                          "unresolved": len(result["unresolved"])})
+                self.send_json(result)
                 return
             if path == "/api/memory/history":
                 # Server-resolved identity: a caller can only read its own history.
-                actor = permissions.session(str(body.get("token", "")))
+                actor = self.actor(body)
                 self.send_json({"messages": memory.history(actor["user_id"])})
                 return
             if path in ("/api/code/propose", "/api/code/apply"):
+                # Changing code is the most dangerous thing the agent can do, so it needs
+                # BOTH a signed-in owner AND the separate code-administrator password.
+                # Neither factor alone is enough. Authorisation is checked first so an
+                # unauthenticated caller gets a straight 403 rather than a 400 that makes
+                # the route look merely malformed.
+                actor = self.actor(body, require_owner=True)
+                self.guard("code")
                 origin = self.headers.get("Origin", "")
                 host = self.headers.get("Host", "")
                 valid_hosts = {"127.0.0.1:" + str(self.server.server_port),
                                "localhost:" + str(self.server.server_port)}
                 if host not in valid_hosts or origin != "http://" + host:
                     raise ValueError("Code changes require a same-origin request from Rizq.")
-                # Changing code is the most dangerous thing the agent can do, so it needs
-                # BOTH a signed-in owner AND the separate code-administrator password.
-                # Neither factor alone is enough.
-                actor = self.actor(body, require_owner=True)
                 client = self.client_address[0]
                 with CODE_LOCK:
                     failures = [t for t in CODE_FAILURES.get(client, []) if time.monotonic() - t < 300]
@@ -289,6 +378,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         proposal = str(body.get("proposal", ""))
                         permissions.audit(actor, "code.apply", allowed=True, detail={"proposal": proposal})
+                        security.alert("code_applied", {"user_id": actor["user_id"]})
                         self.send_json(code_agent.apply(proposal))
                 return
             if path == "/api/database/import":
@@ -320,8 +410,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "name": ACTIVE_DB.name})
                 return
             if path == "/api/chat/local":
+                self.guard("chat")
                 message = str(body.get("message", "")).strip()
-                actor = permissions.session(str(body.get("token", "")))
+                actor = self.actor(body)
                 user_id = actor["user_id"]
                 if not message or len(message) > 5000:
                     raise ValueError("اكتب رسالة من 1 إلى 5000 حرف")
@@ -380,6 +471,7 @@ class Handler(BaseHTTPRequestHandler):
                     tools.db.close()
                 return
             if path == "/api/chat":
+                self.guard("chat")
                 message = str(body.get("message", "")).strip()
                 actor = self.actor(body)
                 if not message or len(message) > 5000:
@@ -410,6 +502,11 @@ class Handler(BaseHTTPRequestHandler):
                                 "actions": state["tools"].log[-10:]})
                 return
             self.send_json({"error": "not found"}, 404)
+        except security.RateLimited as e:
+            self.send_json({"error": str(e), "code": "rate_limited",
+                            "retry_after": e.retry_after}, 429)
+        except security.SpendCapReached as e:
+            self.send_json({"error": str(e), "code": "spend_cap"}, 402)
         except permissions.PermissionDenied as e:
             self.send_json({"error": str(e), "code": "forbidden"}, 403)
         except Exception as e:

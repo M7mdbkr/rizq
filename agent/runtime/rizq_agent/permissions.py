@@ -54,11 +54,14 @@ TOOL_MIN_ROLE = {
     "apply_fixes": "owner",
     "build_skill": "owner",
     "save_fixed_copy": "owner",
+    "list_fill_fields": "owner",
+    "fill_template": "owner",
+    "export_data": "owner",
 }
 
 # Tools that change or export data. Allowed only for the owner AND only when the
 # session was opened with a PIN in this process (never on a role guessed by a client).
-WRITE_TOOLS = {"apply_fixes", "build_skill", "save_fixed_copy"}
+WRITE_TOOLS = {"apply_fixes", "build_skill", "save_fixed_copy", "export_data"}
 
 TOKEN_TTL_SECONDS = 12 * 60 * 60      # absolute lifetime
 TOKEN_IDLE_SECONDS = 60 * 60          # idle timeout
@@ -179,12 +182,32 @@ def verify_pin(db_path: str, pin: str) -> dict | None:
         return None
     finally:
         con.close()
-    match = None
     # Compare against every row so the time taken does not reveal which user matched.
+    matches = [r for r in rows
+               if hmac.compare_digest(str(r["pin"]), pin) and r["role"] in ROLE_RANK]
+    if len(matches) != 1:
+        # Zero is a wrong PIN. More than one means two employees share a PIN, so the
+        # server cannot tell who is signing in -- refuse rather than pick one.
+        return None
+    r = matches[0]
+    return {"user_id": r["id"], "name": r["name"], "role": r["role"]}
+
+
+def duplicate_pins(db_path: str) -> list:
+    """Employees who share a PIN. Each person must have their own, or the till cannot
+    attribute a shift, a repair or an audit entry to the right human."""
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        con.row_factory = sqlite3.Row
+        rows = con.execute("SELECT id, name, pin FROM users").fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        con.close()
+    seen: dict = {}
     for r in rows:
-        if hmac.compare_digest(str(r["pin"]), pin) and r["role"] in ROLE_RANK:
-            match = {"user_id": r["id"], "name": r["name"], "role": r["role"]}
-    return match
+        seen.setdefault(str(r["pin"]), []).append({"user_id": r["id"], "name": r["name"]})
+    return [{"users": v} for v in seen.values() if len(v) > 1]
 
 
 def login(db_path: str, pin: str, client: str = "local") -> dict:
@@ -238,6 +261,8 @@ def logout(token: str) -> None:
 
 
 def reset_for_tests() -> None:
+    from . import security          # local import keeps the module dependency one-way
+    security.reset_for_tests()
     with _LOCK:
         _TOKENS.clear()
         _PIN_FAILURES.clear()

@@ -10,9 +10,10 @@ your own data, repairs it when it breaks, and fixes its own code.**
 Arabic-first · runs on your machine · free local models · no cloud, no subscription
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-d4af37.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-165%20passing-79aa82.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-205%20passing-79aa82.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3b82f6.svg)](#requirements)
 [![Model cost](https://img.shields.io/badge/model%20cost-0%20SAR-79aa82.svg)](#the-ai-agent)
+[![Security](https://img.shields.io/badge/security-audited-79aa82.svg)](SECURITY.md)
 
 </div>
 
@@ -135,6 +136,44 @@ the conversation.
 
 Every allowed and denied call is written to an append-only audit log.
 
+### Fill a form instead of retyping numbers
+
+The accountant sends a sheet with blanks. Hand it to the agent and get it back filled:
+
+```
+المبيعات: {{sales_total}} ر.س
+الضريبة:  {{vat_collected:month=2026-10}} ر.س
+المخزون:  {{inventory_at_cost}} ر.س
+الزكاة:   {{zakat_due}}
+```
+
+```
+المبيعات: 80,855.12 ر.س
+الضريبة:  10,546.27 ر.س
+المخزون:  6,064.00 ر.س
+الزكاة:   {{zakat_due}}        ← left blank on purpose
+```
+
+Every figure comes from a skill whose **independent checker agreed**. Zakat stayed blank
+because it needs cash balances Rizq does not store — the agent reports *why* a blank was
+left rather than inventing a number for someone's tax form.
+
+### Hand over everything, once
+
+`GET /api/export` (owner only) returns a single ZIP: every table as CSV, a complete
+database copy, the agent's audit log, chat history, escalations, and the current
+integrity report — with a README explaining each file.
+
+**Employee PINs are redacted** in both the CSV and the database copy. The live database
+is never modified.
+
+### One PIN per employee
+
+Each employee has their own PIN and sees only their own side. Two people cannot share one:
+the POS refuses a duplicate when you add or change it, and the server refuses to resolve an
+ambiguous PIN rather than guessing which person is signing in — otherwise a shift, a repair
+and every audit entry would be attributed to the wrong human.
+
 ### It can fix its own code
 
 Point it at a file and describe the problem; it writes a targeted edit, which is applied
@@ -160,7 +199,7 @@ cd agent/runtime && python3 -m rizq_agent.code_agent
 
 ```bash
 cd agent/runtime
-python3 -m unittest discover -s tests        # 165 tests
+python3 -m unittest discover -s tests        # 205 tests
 python3 -m rizq_agent requests --split dev   # owner-request evaluation
 python3 -m rizq_agent rizq eval --split dev  # planted faults on the real database
 ```
@@ -214,6 +253,12 @@ Rizq.md              the full engineering record: decisions, results, known prob
   normalisation (hamza forms, prefixes). That is the next fix.
 
 ---
+
+## Security
+
+Authentication is server-side, roles are deny-by-default, owners can enable TOTP two-factor,
+every route is rate limited, and every allowed or denied action is logged. A full audit —
+including the three things that are **not** done — is in [SECURITY.md](SECURITY.md).
 
 ## Licence
 

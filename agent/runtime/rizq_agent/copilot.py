@@ -25,10 +25,15 @@ import urllib.request
 from collections import Counter
 from dataclasses import asdict
 
-from . import permissions, rizq, skills, triage
+from . import export, fill, permissions, rizq, skills, triage
 from .llm import _load_key
 
 MAX_STEPS = 10
+
+
+def _memory_path():
+    from . import memory
+    return memory.PATH
 
 SYSTEM = """You are Rizq Agent, the operations agent of Rizq, a Saudi restaurant POS (VAT 15%, ZATCA receipts).
 You can act on the real POS database ONLY through your tools. Rules:
@@ -72,6 +77,12 @@ TOOLS = [
     {"name": "list_features", "description": "Read the Rizq feature backlog. Show which features are parked and which read-only reports the agent may build.",
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "list_known_problems", "description": "Read the documented Rizq problem catalog and its reproduction/fix status.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "list_fill_fields", "description": "List the placeholders that can be filled into a document template, with what each one means.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "fill_template", "description": "Fill {{placeholders}} in a document the owner supplies with verified figures from the POS. A value is written only when the skill's independent checker agrees; otherwise the blank is left and reported.",
+     "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "export_data", "description": "Export every table, the audit log, the chat history and the current integrity findings as one ZIP file for an accountant or auditor. Employee PINs are redacted.",
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "save_fixed_copy", "description": "Save the repaired working copy as a NEW file next to the results (the original is never overwritten).",
      "input_schema": {"type": "object", "properties": {}}},
@@ -231,6 +242,32 @@ class PosTools:
         with open(os.path.join(os.path.dirname(path), "challenges.json"), encoding="utf-8") as fh:
             result["major_challenges"] = json.load(fh)["challenges"]
         return result
+
+    def t_list_fill_fields(self) -> dict:
+        return {"fields": fill.available_fields(),
+                "syntax": "{{field}} or {{field:days=30}} inside the document"}
+
+    def t_fill_template(self, text: str) -> dict:
+        if not isinstance(text, str) or not text.strip():
+            return {"error": "send the document text to fill"}
+        if len(text) > 500_000:
+            return {"error": "document is too large (limit 500 KB of text)"}
+        return fill.fill(self.db, text)
+
+    def t_export_data(self) -> dict:
+        os.makedirs(self.out_dir, exist_ok=True)
+        who = (self.actor or {}).get("name", "local operator")
+        name, blob = export.build(self.src if isinstance(self.src, str) else "", who=who,
+                                  audit_path=permissions.AUDIT_PATH,
+                                  memory_path=_memory_path(),
+                                  escalations_path=os.path.join(self.out_dir, "escalations.jsonl"))
+        path = os.path.join(self.out_dir, name)
+        with open(path, "wb") as fh:
+            fh.write(blob)
+        return {"saved": path, "bytes": len(blob),
+                "contains": "every table as CSV, a redacted database copy, the audit log, "
+                            "chat history, escalations and the integrity report",
+                "pins_redacted": True}
 
     def t_save_fixed_copy(self) -> dict:
         os.makedirs(self.out_dir, exist_ok=True)

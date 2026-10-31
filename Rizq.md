@@ -97,8 +97,75 @@ owner login → 13 tools, worker login → 5 tools, wrong PIN → 403, and worke
 The 8000 server was restarted on the new code and `/pos/` serves the patched bundle. Dev owner-request
 accuracy unchanged at 100%. **Held-out split still NOT run** (one-shot at freeze, standing rule 7).
 
+### C-3. Session of 31 Oct 2026 (later) — usability, self-repair, documents, export
+Mohammad reported three things were wrong in use: the assistant "was not working", every page
+reload started over, and it asked for a password he had already typed. All three are fixed,
+and two new capabilities were added on top.
+
+**Reload no longer forgets.** The cashier wrote the signed-in user id to localStorage and never
+read it back (`useState(null)`), so every reload returned to the PIN keypad and the chat emptied.
+The session is now restored after the database is ready, agent sessions are persisted to disk
+(only a SHA-256 of the token), and signing in to Rizq silently opens the agent session with the
+same PIN — so the second password prompt is gone. 8 tests cover reload, restart, logout, expiry,
+PIN/token never on disk, and two devices at once.
+
+**The assistant was unusably slow, not broken.** Measured locally: 370-736 s per question, and
+qwen3:8b garbled a VAT figure (٢٨٨.٩٣ against the correct 2,698.38). Answers now route through
+the verified skills first and reach a model only where the rules run out — which is D6/D13.
+Measured after: **0.0 s** per question for the seven common ones. `RIZQ_FORCE_MODEL=1` forces the
+model path for comparison.
+
+**Code self-repair now actually works.** Four real defects were found by reading raw model output
+instead of guessing: whole-file rewrites silently deleted three functions; an 11 KB file could not
+be escaped into JSON (3/3 malformed); replies were truncated mid-edit because `max_tokens` was
+never set; and Ollama silently truncated the prompt (2050 of ~4200 tokens) so the model never saw
+the function it was asked to change. Now: a code-specific model, a SEARCH/REPLACE edit protocol
+instead of a rewrite, `num_ctx` sized to the prompt, indentation-tolerant line-aligned matching,
+structural checks that reject a proposal which guts a file or deletes definitions, and
+validate-and-retry with the failure fed back. Proven end to end: the agent fixed a real
+`FileNotFoundError` leak in its own `validate_content` in 52 s on a free local model, the fix
+verifiably works, and the suite stayed green afterwards.
+
+**Fill a document (`fill.py`).** `{{placeholder}}` tokens in an owner-supplied file are replaced
+with figures from the POS, with optional parameters (`{{sales_total:days=7}}`). A value is written
+only when the skill's independent checker agrees; otherwise the blank is left and the reason is
+reported. Zakat correctly stays blank because it needs balances Rizq does not store.
+
+**Export everything (`export.py`).** One ZIP: every table as CSV, a full database copy, the audit
+log, chat history, escalations and the integrity report, plus a README. **PINs are redacted in both
+the CSV and the SQLite copy**; the live database is never modified.
+
+**One PIN per employee.** `verify_pin` now refuses an ambiguous PIN instead of returning the last
+matching row, `duplicate_pins()` reports collisions, and the POS refuses a duplicate when adding a
+user or changing a PIN (`tools/pos_patches/patch_users.py`).
+
+**Also fixed:** "المخزون الناقص" matched `inventory_value`; a `low_stock` skill with its own checker
+was added ahead of it. Repository restructured so its root is the project, renamed to `rizq`, with
+README, MIT licence and third-party notices.
+
+**Verification:** full suite **205 tests pass** (after the security work). Held-out re-run after every change and unchanged
+throughout: 90.0% action accuracy, 11/11 answers, 6/6 dangerous refused, 0 unsafe writes.
+
+### C-4. Security audit, 31 Oct 2026
+Mohammad gave a 20-item checklist. Full report with evidence: `SECURITY.md`. Headlines:
+- **Found and fixed:** a non-demo PIN and five customer names had been committed to a repo that
+  was public (repo made private, values scrubbed, evaluations re-run and unchanged); four
+  endpoints ignored the Authorization header; code routes checked same-origin before
+  authentication, so an unauthenticated caller got 400 instead of 403; `/api/health` described
+  the database and provider setup to anyone; two employees could be given the same PIN, which
+  would attribute shifts and audit entries to the wrong person.
+- **Added:** TOTP two-factor for owners (RFC 6238, matches the published test vector, replay
+  rejected, secret stored 0600); one sliding-window rate limiter across every route; a daily cap
+  on paid-provider calls; an alerts file and `/api/alerts` for high-signal events.
+- **Honest gaps, written down rather than glossed:** employee PINs are still stored in clear text
+  by the cashier and hashing needs the POS source; the browser database is not encrypted at rest;
+  "RLS for every table" does not map to browser SQLite, and the equivalent control (no client
+  queries the database directly; every read goes through a role-gated tool) is documented as such.
+- Dependencies: the agent imports **nothing outside the Python standard library**, so there is
+  nothing to update and nothing unused to remove.
+
 ### D. Where things stand / what is in progress
-- Tests: **147/147 pass** (31 Oct, ~02:55). Earlier counts in this file (99, 109) are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
+- Tests: **205/205 pass** (31 Oct, ~13:00). Earlier counts in this file (99, 109, 147, 183) are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.
 
 ### E. Next steps (in order)
@@ -168,7 +235,7 @@ Code of the agent: `agent/runtime/` (inside this same Rizq project).
 |---|---|
 | Agent permissions (CH-05) | **implemented with limits** on 31 Oct: server-side PIN login, deny-by-default role policy in the tools, owner-only data endpoints, audit log. 38 dedicated tests |
 | Rizq POS app | working local app, compiled bundle only (`rizq-pos/`), source NOT available. Sections/items ordering + section-delete integrity patched into the bundle on 31 Oct (see C-2) |
-| Rizq Agent (chat, skills, triage, repair, escalate) | built, **147/147 tests pass** (31 Oct 2026, ~02:55) |
+| Rizq Agent (chat, skills, triage, repair, escalate, fill, export) | built, **183/183 tests pass** (31 Oct 2026, ~12:30) |
 | LLM connection | works with a FREE local model (Ollama `qwen3:8b`, auto-picked, no key). Claude used instead if `ANTHROPIC_API_KEY` is in `.env` |
 | Owner-request eval, dev split (30 requests) | decision accuracy 100%, answers 12/12 vs independent SQL, dangerous refused 6/6, wrong refusals 0, unsafe writes 0 |
 | Owner-request eval, **held-out** split (30 requests) | **RUN ONCE 31 Oct ~03:05 at freeze**: action accuracy **90.0%**, answers 11/11 vs reference SQL, dangerous refused 6/6, wrong refusals 1, unsafe writes 0, file unchanged. 3 misses (H05/H12/H16) — NOT tuned against |
