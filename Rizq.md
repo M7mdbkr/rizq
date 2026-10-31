@@ -262,6 +262,12 @@ asked for — export the file, hand it back, get it filled from the database.
 - Live check on the desktop server: greeting, sales today, top customers, low stock all answered in 0.0 s.
 - Tests: 339.
 
+### C-10. Answer only (31 Oct 2026, ~19:50)
+- Owner's rule: messages show the answer only. Removed from replies: confidence lines, assumption footnotes
+  (zakat keeps its estimate note), "handed to a bigger model" notes, the ✅ prefix and the "welcome back" line.
+  Confidence still drives routing and stays in the response fields (`confidence`, `escalated_to`).
+- Tests: 340.
+
 ### D. Where things stand / what is in progress
 - Tests: **267/267 pass** (31 Oct, ~15:00), including 26 scenario tests, the confidence gate and the scheduler. Earlier counts are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.

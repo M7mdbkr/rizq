@@ -788,14 +788,9 @@ class Handler(BaseHTTPRequestHandler):
                                     answer, verdict, escalated_to = answer2, v2, bigger
                             except Exception:
                                 pass                      # keep the first answer
-                    if escalated_to:
-                        answer = (f"النموذج الخفيف ({used}) ما قدر يتحقق من الجواب، فحوّلت السؤال لنموذج أكبر ({escalated_to}).\n"
-                                  + (answer or ""))
-                    if not verdict.approved:
-                        answer = (answer or "").rstrip() + "\n" + verdict.note_ar()
-                        if not bigger and state["provider"] in ("auto", "ollama") and not getattr(state["brain"], "paid", False):
-                            answer += ("\nأخذ وقت طويل، فما حوّلته لنموذج أكبر." if time.time() - started >= 45 else
-                                       "\nما فيه نموذج أكبر محمّل يتحمله جهازك. تقدر تنزّل واحد من إعدادات المساعد ← النماذج المجانية.")
+                    # The owner asked for the answer only: no confidence line, no routing notes.
+                    # Both stay in the response fields for the audit trail.
+                    answer = (answer or "").strip()
                     memory.append_exchange(user_id, message, answer, conv)
                     self.send_json({"session": sid, "answer": answer, "provider": state["brain"].name,
                                     "model": escalated_to or used,

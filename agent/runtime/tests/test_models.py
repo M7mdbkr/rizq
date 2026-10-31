@@ -188,7 +188,7 @@ class LadderTests(unittest.TestCase):
         result = self.chat(["ما أدري", "السبب: نقص الطلبات يوم الخميس"], [60, 97], ["qwen3:8b", "qwen3.5:9b"])
         # qwen3.5:9b does not fit an 8 GB device, so it must not be used...
         self.assertIsNone(result["escalated_to"])
-        self.assertIn("تنزّل", result["answer"])
+        self.assertEqual(result["answer"], "ما أدري")                 # just the answer, no notes
         result = self.chat(["ما أدري", "السبب: نقص الطلبات يوم الخميس"], [60, 97], ["qwen3:8b", "my-model:latest", "qwen3.5:4b"])
         self.assertIsNone(result["escalated_to"])      # nothing bigger on the ladder
 
@@ -198,8 +198,7 @@ class LadderTests(unittest.TestCase):
         with mock.patch.object(models, "quick", side_effect=lambda names, dev=None: names):
             result = self.chat(["ما أدري", "السبب: نقص الطلبات يوم الخميس"], [60, 97], ["qwen3:8b", "gpt-oss:20b"])
         self.assertEqual(result["escalated_to"], "gpt-oss:20b")
-        self.assertTrue(result["answer"].startswith("النموذج الخفيف (qwen3:8b)"))
-        self.assertIn("نقص الطلبات", result["answer"])
+        self.assertEqual(result["answer"], "السبب: نقص الطلبات يوم الخميس")   # no routing note shown
 
 
 if __name__ == "__main__":

@@ -501,10 +501,8 @@ class RulesBrain:
                         lines.append(f"  • {f['kind']} {f['entity']}: {f['action_en']}")
             elif c["name"] == "run_skill":
                 lines.append(_skill_line_impl(out, ar))
-                verdict = confidence.score_skill(
-                    out, matched_exactly=True, owner_params=c["input"].get("params") or {})
-                if ar and verdict.note_ar():
-                    lines.append(verdict.note_ar())
+                # Scored for routing only; the owner asked to see just the answer.
+                confidence.score_skill(out, matched_exactly=True, owner_params=c["input"].get("params") or {})
             elif c["name"] == "apply_fixes":
                 lines.append(f"- apply_fixes: {json.dumps(out, ensure_ascii=False)[:300]}")
             elif c["name"] == "get_order":

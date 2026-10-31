@@ -155,7 +155,9 @@ def skill_answer(result: dict) -> str:
             text = _fallback(title, value)
     else:
         text = _fallback(title, value)
-    notes = [a for a in (result.get("assumptions") or []) if a]
+    # The owner wants only the answer. Zakat keeps its note: it is an estimate that has
+    # to be confirmed with ZATCA, and leaving that out could cost real money.
+    notes = [a for a in (result.get("assumptions") or []) if a] if result.get("skill") == "zakat_estimate" else []
     if notes:
         text += "\n" + "\n".join("  — " + n for n in notes)
     return text

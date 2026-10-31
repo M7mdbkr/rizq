@@ -187,3 +187,13 @@ class SmallTalkTests(unittest.TestCase):
             self.assertTrue(re.search(r"[\u0600-\u06FF]", reply.smalltalk(text)))
         self.assertIn("Hi", reply.smalltalk("hello, how are you?"))
         self.assertIsNone(reply.smalltalk("هلا كم مبيعات اليوم"))       # a real question is not small talk
+
+
+class AnswerOnlyTests(unittest.TestCase):
+    def test_answers_carry_no_confidence_or_footnotes(self):
+        tools = copilot.PosTools(DEV, tempfile.mkdtemp(), lambda q: False)
+        for q in ("كم مبيعات اليوم", "مين اكثر مشتري عندي من العملاء", "المخزون الناقص", "كم قيمة المخزون"):
+            answer = copilot.ask(copilot.RulesBrain(), tools, q, on_event=lambda e: None)
+            self.assertNotIn("ثقتي", answer, q)
+            self.assertNotIn("%", answer.split("\n")[-1], q)
+            self.assertFalse(any(line.strip().startswith("—") for line in answer.splitlines()), answer)
