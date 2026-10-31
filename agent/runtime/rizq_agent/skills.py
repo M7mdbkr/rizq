@@ -56,14 +56,17 @@ def _sales_compute(db, p):
     cut = (_latest(db).date() - timedelta(days=p["days"])).isoformat()
     row = db.execute("SELECT COUNT(*), COALESCE(SUM(final_total),0), COALESCE(SUM(vat_amount),0) FROM orders "
                      "WHERE status='completed' AND date(created_at) > ?", (cut,)).fetchone()
-    return {"orders": row[0], "sales": r2(row[1]), "vat": r2(row[2])}
+    # `days` is returned so the answer states its own window. A silently wrong period
+    # is worse than a wrong number, because nobody notices it.
+    return {"days": p["days"], "orders": row[0], "sales": r2(row[1]), "vat": r2(row[2])}
 
 
 def _sales_check(db, p):
     cut = _latest(db).date() - timedelta(days=p["days"])
     rows = [o for o in _completed(db) if _day(o["created_at"]) > cut]
     # re-derive the charged total from its components; only a gap bigger than rounding counts as a disagreement
-    return {"orders": len(rows), "sales": r2(sum(_within(o["final_total"], o["total"] - o["discount_amount"] + o["vat_amount"]) for o in rows)),
+    return {"days": p["days"], "orders": len(rows),
+            "sales": r2(sum(_within(o["final_total"], o["total"] - o["discount_amount"] + o["vat_amount"]) for o in rows)),
             "vat": r2(sum(o["vat_amount"] for o in rows))}
 
 
@@ -233,9 +236,20 @@ def extract_params(text: str) -> dict:
                 pass
     if re.search(r"gregorian|ميلادي", text, re.I):
         out["calendar"] = "gregorian"
+    # An explicit number always wins: "آخر ٧ أيام" means seven.
     m = re.search(r"(\d+)\s*(?:days|day|يوم|أيام|ايام)", text, re.I)
     if m:
         out["days"] = int(m.group(1))
+    else:
+        # Otherwise understand the ordinary words for a period. Without this,
+        # "كم مبيعات اليوم؟" silently answered for the last seven days.
+        for pattern, days in ((r"\btoday\b|اليوم(?!\s*ي)|النهارده|هاليوم", 1),
+                              (r"\bthis week\b|\bweek\b|الاسبوع|الأسبوع|هالاسبوع|هالأسبوع", 7),
+                              (r"\bthis month\b|\bmonth\b|الشهر|هالشهر", 30),
+                              (r"\bthis year\b|\byear\b|السنة|العام|هالسنة", 365)):
+            if re.search(pattern, text, re.I):
+                out["days"] = days
+                break
     return out
 
 

@@ -76,19 +76,34 @@
   catch(e){ if(e.status===403){remember('');identity=null;} return []; }
  };
 
+ /* The POS restores a signed-in user from localStorage, but a restored session has no
+    PIN -- and the server cannot issue a token without one, because trusting the browser
+    is exactly what we refuse to do. So ask once, here, and only in that case. After a
+    normal keypad sign-in a token already exists and this never runs. */
+ async function ensureSession(){
+  if(token)return true;
+  const pin=window.prompt('لتشغيل المساعد الذكي، أدخل رقمك السري في رزق مرة واحدة:');
+  if(!pin)throw new Error('المساعد يحتاج رقمك السري ليتأكد من صلاحياتك.');
+  await window.rizqAgentLogin(pin);
+  return true;
+ }
+
  /* options.approve: a signed-in OWNER approves derived-data repairs for this one
     message. The server ignores the flag unless the token really resolves to an owner. */
  window.rizqAgentAsk=async (question,options)=>{
-  if(!token)throw new Error('سجّل الدخول في رزق أولًا حتى يشتغل المساعد.');
+  await ensureSession();
   const sqlite_base64=await exportDatabase();
   const approve_repairs=!!(options&&options.approve);
   let result;
   try{
    result=await api('/api/chat/local',{message:question,token,sqlite_base64,session,approve_repairs});
   }catch(error){
-   if(error.status===403){
+   if(error.status===403){        // expired: ask for the PIN once and retry
     remember(''); identity=null;
-    throw new Error('انتهت جلستك. سجّل خروج ودخول في رزق مرة ثانية.');
+    await ensureSession();
+    result=await api('/api/chat/local',{message:question,token,sqlite_base64,session,approve_repairs});
+    session=result.session;
+    return result.answer||'لم يرد النموذج. حاول مرة أخرى.';
    }
    if(error.status===404){           // older server without the local chat endpoint
     await api('/api/database/import',{token,sqlite_base64});
@@ -101,7 +116,7 @@
 
  /* Owner-only: the agent's own audit trail of allowed and denied tool calls. */
  window.rizqAgentAudit=async (limit=50)=>{
-  if(!token)throw new Error('سجّل الدخول في رزق أولًا.');
+  await ensureSession();
   return (await api('/api/audit',{token,limit})).entries||[];
  };
 
