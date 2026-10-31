@@ -249,10 +249,13 @@ def main() -> None:
     i = sub.add_parser("ai"); i.add_argument("--n", type=int, default=20); i.add_argument("--split", default="dev")
     w = sub.add_parser("web", help="run the full-stack Rizq POS and AI dashboard locally")
     w.add_argument("--port", type=int, default=8000)
+    w.add_argument("--host", default=None, help="bind address (default 127.0.0.1)")
+    w.add_argument("--lan", action="store_true",
+                   help="serve to phones and tablets on this Wi-Fi (binds 0.0.0.0)")
     a = p.parse_args()
     if a.cmd == "web":
         from .web import main as serve_web
-        serve_web(a.port)
+        serve_web(a.port, "0.0.0.0" if a.lan else a.host)
         return
     {"demo": cmd_demo, "sheet": cmd_sheet, "eval": cmd_eval, "heldout": cmd_heldout, "ai": cmd_ai, "rizq": cmd_rizq, "chat": cmd_chat, "requests": cmd_requests}[a.cmd](a)
 

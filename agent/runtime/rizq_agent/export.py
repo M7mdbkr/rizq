@@ -25,6 +25,35 @@ from . import rizq
 REDACTED = "[REDACTED]"
 SENSITIVE_COLUMNS = {"pin", "password", "token", "secret", "passcode"}
 
+TEMPLATE = """تقرير رزق — نموذج للتعبئة
+=====================================
+هذا الملف يُعاد إلى وكيل رزق فيعبّئ الفراغات من بيانات المطعم.
+كل رقم يُكتب فقط إذا وافق عليه المدقّق المستقل؛ وإلا يُترك الفراغ مع سبب واضح.
+
+التاريخ                 : {{today}}
+وقت الإنشاء             : {{generated_at}}
+
+المبيعات (٣٠ يوم)        : {{sales_total}} ر.س
+عدد الطلبات             : {{sales_orders}}
+ضريبة المبيعات          : {{sales_vat}} ر.س
+الضريبة المحصّلة         : {{vat_collected}} ر.س
+
+الإيراد بدون ضريبة       : {{revenue_ex_vat}} ر.س
+تكلفة المبيعات          : {{cost_of_goods}} ر.س
+الربح الإجمالي           : {{gross_profit}} ر.س
+
+قيمة المخزون بالتكلفة    : {{inventory_at_cost}} ر.س
+قيمة المخزون بالبيع      : {{inventory_at_retail}} ر.س
+عدد الأصناف             : {{products_count}}
+أصناف ناقصة             : {{low_stock_count}}
+أصناف منتهية            : {{out_of_stock_count}}
+
+الزكاة التقديرية         : {{zakat_due}}
+   (تحتاج رصيدك النقدي، ورزق لا يسجّله — يبقى فارغًا حتى تعطيه الوكيل)
+
+ملاحظة: هذه سجلات رزق وليست إقرارًا ضريبيًا، ولم يُرسل منها شيء إلى هيئة الزكاة والضريبة.
+"""
+
 README = """RIZQ DATA EXPORT
 ================
 
@@ -56,6 +85,11 @@ reports/integrity.csv
 
 reports/summary.json
     Row counts and totals, so the recipient can check nothing was lost in transit.
+
+templates/monthly-report.txt
+    A form with {{{{blanks}}}}. Hand this file back to the Rizq agent and it fills every
+    blank from the database. A figure is written only when an independent checker
+    agrees with it; anything it cannot verify stays blank with the reason given.
 
 PRIVACY
     Employee PINs are redacted everywhere in this export. Customer records are
@@ -174,6 +208,7 @@ def build(db_path: str, *, who: str = "owner", audit_path: pathlib.Path | None =
         if escalations_path and pathlib.Path(escalations_path).exists():
             z.writestr("logs/escalations.jsonl", pathlib.Path(escalations_path).read_text(encoding="utf-8"))
         z.writestr("reports/integrity.csv", integrity)
+        z.writestr("templates/monthly-report.txt", TEMPLATE)
         z.writestr("reports/summary.json", json.dumps({
             "created": created.isoformat(timespec="seconds"),
             "exported_by": who,

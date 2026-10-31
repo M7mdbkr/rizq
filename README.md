@@ -10,7 +10,7 @@ your own data, repairs it when it breaks, and fixes its own code.**
 Arabic-first · runs on your machine · free local models · no cloud, no subscription
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-d4af37.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-205%20passing-79aa82.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-231%20passing-79aa82.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.9%2B-3b82f6.svg)](#requirements)
 [![Model cost](https://img.shields.io/badge/model%20cost-0%20SAR-79aa82.svg)](#the-ai-agent)
 [![Security](https://img.shields.io/badge/security-audited-79aa82.svg)](SECURITY.md)
@@ -43,6 +43,40 @@ problem in their own dialect, and the agent does one of four things — and says
 
 ---
 
+## Five situations it is built for
+
+Each one is covered by an end-to-end test that runs a real server over HTTP
+(`agent/runtime/tests/test_scenarios.py`, 26 tests).
+
+**1 · The internet is down and you still need numbers.**
+No cloud, no API key — and in the test, *no model at all*: reaching for one raises. Sales,
+stock, profit and VAT still answer in under a second from verified skills, and
+"احذف كل الطلبات" is still refused. The assistant degrades to offline automatically;
+you never switch a mode.
+
+**2 · Three employees, three keys, three lockers.**
+Every person has their own PIN and their own identity. Two workers get *identical*
+functionality but separate conversations and separate audit trails. Neither can reach the
+money. Two people can never be given the same PIN — the till refuses to create one, and
+the server refuses to resolve an ambiguous one rather than guessing who is signing in.
+
+**3 · The accountant asks for the books.**
+One click exports everything as a single ZIP — every table, the database, the audit log,
+chat history and the integrity report — with **every employee PIN redacted**. Inside is a
+form with blanks. Hand that form back to the agent and it comes back filled from the
+database. Anything it cannot independently verify stays blank *with the reason*.
+
+**4 · The manager walks around with a tablet.**
+Run it with `--lan` and the till, a phone and an iPad all reach the same Rizq over the
+shop Wi-Fi, each person signing in with their own PIN. The default is this-device-only, so
+going on the network is always a deliberate choice, and code changes are refused from any
+address that is not loopback or a real private LAN.
+
+**5 · A PIN gets watched across the counter.**
+The owner turns on TOTP two-factor; from then on their PIN alone is not enough and a stolen
+code cannot be replayed. Staff keep signing in with a PIN, because a till cannot wait for
+somebody's phone.
+
 ## How it works
 
 <div align="center">
@@ -66,7 +100,8 @@ problem in their own dialect, and the agent does one of four things — and says
 ```bash
 git clone https://github.com/M7mdbkr/rizq.git
 cd rizq/agent/runtime
-python3 -m rizq_agent web --port 8000
+python3 -m rizq_agent web --port 8000          # this device only
+python3 -m rizq_agent web --port 8000 --lan    # also phones and tablets on this Wi-Fi
 ```
 
 Then open **<http://127.0.0.1:8000/pos/>**.
@@ -199,7 +234,8 @@ cd agent/runtime && python3 -m rizq_agent.code_agent
 
 ```bash
 cd agent/runtime
-python3 -m unittest discover -s tests        # 205 tests
+python3 -m unittest discover -s tests          # 231 tests
+python3 -m unittest tests.test_scenarios       # the five situations above
 python3 -m rizq_agent requests --split dev   # owner-request evaluation
 python3 -m rizq_agent rizq eval --split dev  # planted faults on the real database
 ```

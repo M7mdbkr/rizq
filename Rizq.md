@@ -164,8 +164,26 @@ Mohammad gave a 20-item checklist. Full report with evidence: `SECURITY.md`. Hea
 - Dependencies: the agent imports **nothing outside the Python standard library**, so there is
   nothing to update and nothing unused to remove.
 
+### C-5. Scenario tests, 31 Oct 2026
+Five situations written as end-to-end tests against a real HTTP server
+(`tests/test_scenarios.py`, 26 tests): works with no internet and no model; three employees
+with separate keys and identical functionality; the accountant export and the fill-it-back
+round trip; the same Rizq from a tablet on the shop Wi-Fi; and owner two-factor.
+
+Two real defects were found by writing them:
+- **The launcher advertised a LAN URL that could not work.** `web.main` bound `127.0.0.1`
+  while `تشغيل رزق.command` printed `http://<lan-ip>:8000/pos/` for the iPad. Added
+  `--lan`/`--host`, kept loopback as the default, and made the launcher ask before going on
+  the network. Verified: the LAN URL now serves 200, and is unreachable without the flag.
+- **`_is_local_address` accepted public documentation ranges.** It used
+  `ipaddress.is_private`, which returns True for 203.0.113.0/24 and other reserved blocks.
+  Replaced with an explicit RFC1918 + unique-local check, so code changes cannot be driven
+  from a non-LAN address.
+Also: the export now ships `templates/monthly-report.txt`, closing the round trip the owner
+asked for — export the file, hand it back, get it filled from the database.
+
 ### D. Where things stand / what is in progress
-- Tests: **205/205 pass** (31 Oct, ~13:00). Earlier counts in this file (99, 109, 147, 183) are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
+- Tests: **231/231 pass** (31 Oct, ~13:45), including 26 end-to-end scenario tests. Earlier counts (99, 109, 147, 183, 205) are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.
 
 ### E. Next steps (in order)

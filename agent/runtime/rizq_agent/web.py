@@ -55,6 +55,27 @@ def provider_status() -> dict:
     }
 
 
+# RFC1918 plus IPv6 unique-local. Deliberately NOT ipaddress.is_private, which also
+# returns True for documentation and reserved ranges such as 203.0.113.0/24 -- broader
+# than "a device on this shop's Wi-Fi", which is the only thing we mean to allow.
+_LAN_NETWORKS = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
+
+
+def _is_local_address(hostname: str) -> bool:
+    """True only for loopback, link-local, or a real private LAN address."""
+    if hostname in ("localhost", "::1"):
+        return True
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    if ip.is_loopback or ip.is_link_local:
+        return True
+    return any(ip in ipaddress.ip_network(net) for net in _LAN_NETWORKS
+               if ipaddress.ip_network(net).version == ip.version)
+
+
 def validate_database(path: pathlib.Path) -> None:
     with path.open("rb") as fh:
         if fh.read(16) != b"SQLite format 3\x00":
@@ -351,12 +372,17 @@ class Handler(BaseHTTPRequestHandler):
                 # the route look merely malformed.
                 actor = self.actor(body, require_owner=True)
                 self.guard("code")
+                # Same-origin in the real sense: the page asking must be this server.
+                # Pinning to 127.0.0.1 would break the till's tablets, so compare the
+                # Origin against the Host actually used, and require that host to be
+                # loopback or a private LAN address -- never a public one.
                 origin = self.headers.get("Origin", "")
                 host = self.headers.get("Host", "")
-                valid_hosts = {"127.0.0.1:" + str(self.server.server_port),
-                               "localhost:" + str(self.server.server_port)}
-                if host not in valid_hosts or origin != "http://" + host:
+                if not host or origin not in ("http://" + host, "https://" + host):
                     raise ValueError("Code changes require a same-origin request from Rizq.")
+                hostname = host.rsplit(":", 1)[0].strip("[]")
+                if not _is_local_address(hostname):
+                    raise ValueError("Code changes are only allowed from this device or its local network.")
                 client = self.client_address[0]
                 with CODE_LOCK:
                     failures = [t for t in CODE_FAILURES.get(client, []) if time.monotonic() - t < 300]
@@ -516,11 +542,36 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"ok": True})
 
 
-def main(port: int = 8000):
+def local_ip() -> str | None:
+    """This machine's address on the LAN, for the till's tablets and phones."""
+    import socket
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("10.255.255.255", 1))     # no packet is sent
+        return probe.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        probe.close()
+
+
+def main(port: int = 8000, host: str | None = None):
     load_dotenv()
-    host = "127.0.0.1"
+    # Default stays loopback. Binding to every interface is opt-in, because it puts
+    # the till on the shop's network: that is the point for an iPad, but it should
+    # never happen by accident.
+    host = host or os.environ.get("RIZQ_HOST", "127.0.0.1")
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f"Rizq is running at http://{host}:{port} (local only). POS: http://{host}:{port}/pos/")
+    if host in ("0.0.0.0", "::"):
+        ip = local_ip()
+        print(f"Rizq is on the network. This device: http://127.0.0.1:{port}/pos/")
+        if ip:
+            print(f"                       other devices: http://{ip}:{port}/pos/")
+        print("Anyone on this Wi-Fi can reach the sign-in page; every PIN, role and rate "
+              "limit still applies. Use 127.0.0.1 only if you do not want that.")
+    else:
+        print(f"Rizq is running at http://{host}:{port} (this device only). "
+              f"POS: http://{host}:{port}/pos/")
     print("LLM provider status:", json.dumps(provider_status(), ensure_ascii=False))
     try:
         server.serve_forever()

@@ -52,10 +52,25 @@ if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+
+# الوضع الافتراضي: هذا الجهاز فقط. لو تبي الآيباد/الجوال، لازم نفتح على الشبكة صراحةً.
+LAN=""
+if [ -n "$IP" ]; then
+  echo
+  echo "  تبي تفتح رزق للآيباد والجوال على نفس الواي فاي؟"
+  echo "  (كل واحد يسجل دخوله برقمه السري، والصلاحيات تبقى زي ما هي)"
+  read -r -p "  افتح على الشبكة؟ [y/N]: " ANSWER
+  case "$ANSWER" in [yY]|[نN]) LAN="--lan" ;; esac
+fi
+
 echo
 echo "----------------------------------------------------------------"
 echo "   على هذا الجهاز:    $URL"
-[ -n "$IP" ] && echo "   من الآيباد/الجوال:  http://$IP:$PORT/pos/   (نفس الواي فاي)"
+if [ -n "$LAN" ] && [ -n "$IP" ]; then
+  echo "   من الآيباد/الجوال:  http://$IP:$PORT/pos/   (نفس الواي فاي)"
+else
+  echo "   هذا الجهاز فقط — شغّل من جديد واختر y لفتحه للأجهزة الثانية"
+fi
 echo "----------------------------------------------------------------"
 echo
 echo "   المساعد الذكي يطلب رقمك السري أول مرة — هذا طبيعي:"
@@ -66,4 +81,4 @@ echo "================================================================"
 echo
 
 ( sleep 2 && open "$URL" 2>/dev/null ) &
-exec python3 -m rizq_agent web --port "$PORT"
+exec python3 -m rizq_agent web --port "$PORT" $LAN
