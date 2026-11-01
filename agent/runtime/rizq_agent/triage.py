@@ -29,7 +29,9 @@ _EDIT_VALUE = (r"(set|change|make|edit|عدّل|عدل|غير|غيّر|خل|خل
 _EDIT_TO = r"\bto\s*\d|الى\s*\d|إلى\s*\d|صفر|مجان|\bfree\b|\bzero\b"
 _MAKE_FREE = r"(\b(make|set)\b|خل|خلّ|خلي|اجعل|سو|سوي).{0,30}(مجان|\bfree\b|\bzero\b|بصفر|ب ?0\b)"
 _RAW_WRITE = r"\b(update|insert|alter|replace|create)\b.{0,40}\b(set|into|table|index)\b"
-_OUT_OF_SCOPE = r"weather|طقس|قصيدة|poem|joke|نكتة|football|كورة|recipe|وصفة"
+_OUT_OF_SCOPE = (r"weather|طقس|قصيدة|poem|joke|نكتة|football|كورة|recipe|وصفة|"
+                 r"برمجة|بايثون|python|javascript|ترجم|translate|رئيس|president|اخبار|أخبار|\bnews\b|سياسة|politic|"
+                 r"اغنية|أغنية|\bsong|lyrics|مباراة|فيلم|movie|عاصمة|capital of|chatgpt|homework|واجب")
 _ESCALATE = r"refund|استرجاع|استرداد|ضاع|ضايع|ما انحفظ|مفقود|\blost\b|missing order|chargeback"
 _WRONG = r"wrong|غلط|مو صح|مب صح|مو مضبوط|incorrect|not (correct|right)|مخطئ"
 _DOC = r"invoice|فاتورة|الفاتورة|ضريب|vat|\bord_[a-z0-9_]+"

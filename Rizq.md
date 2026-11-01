@@ -268,6 +268,21 @@ asked for — export the file, hand it back, get it filled from the database.
   Confidence still drives routing and stays in the response fields (`confidence`, `escalated_to`).
 - Tests: 340.
 
+### C-11. "The app makes up data, the dashboard is empty" (1 Nov 2026, ~19:00)
+- Root cause (desktop chat log): on 1 Nov the agent answered "today's sales" and "today's profit" with 31 Oct's
+  figures, because skills took "today" as the newest order's day. The dashboard used the real date and correctly
+  showed nothing (no orders yet on 1 Nov). Fix: `skills.CLOCK = "real"` on the live server (web.main and the
+  workflow CLI), matching the dashboard's clock (SQLite CURRENT_TIMESTAMP, UTC); evaluations keep "latest".
+  `sales_summary` follows the same clock. A day without sales says so.
+- App-only answers: more off-topic subjects are hard-refused before any model; a model answer that used no app
+  data is replaced (`reply.finish`); "how do I ..." about the app answered from `reply.app_help`.
+- Workflows (`workflows.py`, `/api/workflows/run`, CLI `workflow <name> <db> [--every N]`, "سير العمل" button):
+  day_close, reconcile, low_stock, daily_report, zakat. Read-only, audited, numbers from checked skills.
+- Desktop AI set back to automatic (qwen3:8b) from qwen3.5:0.8b.
+- Live on the desktop server: today → "no sales yet today"; off-topic refused; how-to answered; the model answered
+  "416 customers" via two read-only SQL calls (matches the database); day-close workflow in 0.0 s.
+- Tests: 351.
+
 ### D. Where things stand / what is in progress
 - Tests: **267/267 pass** (31 Oct, ~15:00), including 26 scenario tests, the confidence gate and the scheduler. Earlier counts are superseded. The model-connection tests are in `tests/test_owner_requests.py`: hard refusals never reach the model, unclear requests still go to it, Arabic refusals in Arabic, local model auto-pick, scoring of model runs. Two holes the new tests found and fixed: "خل الشاي مجاني" (make an item free) and raw SQL like "UPDATE orders SET total=0" now get a hard refusal before any model call.
 - A prior note says a real-model dev evaluation had started, but its completion/result was not present during this consolidation. Re-run it only if still needed; evaluation reports print to the terminal.

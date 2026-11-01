@@ -28,9 +28,20 @@ GREGORIAN_RATE = 0.025 * 365 / 354      # ZATCA: 2.5% prorated for a 365-day yea
 REQUIRED = object()
 
 
+# Which day is "today".
+#   "latest": the newest order's day. Evaluations run on frozen fixtures and need this.
+#   "real":   the calendar day, on the same clock the POS dashboard uses (SQLite
+#             CURRENT_TIMESTAMP, which is UTC). The live server switches to this in
+#             web.main(): with "latest", a day with no sales yet was answered with the
+#             previous day's figures, while the dashboard correctly showed nothing.
+CLOCK = os.environ.get("RIZQ_CLOCK", "latest")
+
+
 def _latest(db) -> datetime:
+    if CLOCK == "real":
+        return datetime.utcnow()
     row = db.execute("SELECT MAX(created_at) FROM orders").fetchone()[0]
-    return datetime.fromisoformat(row)
+    return datetime.fromisoformat(row) if row else datetime.utcnow()
 
 
 def _day(s: str):

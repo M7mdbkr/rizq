@@ -197,3 +197,48 @@ class AnswerOnlyTests(unittest.TestCase):
             self.assertNotIn("ثقتي", answer, q)
             self.assertNotIn("%", answer.split("\n")[-1], q)
             self.assertFalse(any(line.strip().startswith("—") for line in answer.splitlines()), answer)
+
+
+class RealClockTests(unittest.TestCase):
+    """The live app's "today" is the calendar day, like the dashboard, never the last day with sales."""
+    def test_a_day_without_sales_is_not_answered_with_yesterday(self):
+        from rizq_agent import phrase, skills
+        import sqlite3
+        db = sqlite3.connect(DEV); db.row_factory = sqlite3.Row
+        try:
+            latest = skills.run(db, "sales_period", {"days": 1})
+            skills.CLOCK = "real"
+            real = skills.run(db, "sales_period", {"days": 1})
+        finally:
+            skills.CLOCK = "latest"; db.close()
+        self.assertGreater(latest["value"]["orders"], 0)          # the fixture's last day had sales
+        self.assertEqual(real["value"]["orders"], 0)               # but nothing was sold today
+        self.assertEqual(phrase.skill_answer(real), "ما فيه مبيعات اليوم لحد الحين.")
+
+    def test_sales_summary_tool_uses_the_same_today(self):
+        from rizq_agent import skills
+        tools = copilot.PosTools(DEV, tempfile.mkdtemp(), lambda q: False)
+        skills.CLOCK = "real"
+        try:
+            self.assertEqual(tools.t_sales_summary(1)["per_day"], [])
+        finally:
+            skills.CLOCK = "latest"
+
+
+class AppOnlyTests(unittest.TestCase):
+    def test_off_topic_requests_are_refused_before_any_model(self):
+        from rizq_agent import triage
+        for q in ("مين رئيس امريكا", "اكتب لي كود بايثون", "ترجم لي هذي الجملة", "وش الطقس اليوم", "what's the capital of France"):
+            v = triage.classify(q)
+            self.assertEqual((v["action"], v.get("hard")), ("refuse", True), q)
+        self.assertFalse(triage.classify("أنشئ كود خصم VIP بنسبة 20%").get("hard"))   # "كود خصم" is the app, never blocked
+
+    def test_a_model_answer_that_used_no_app_data_is_replaced(self):
+        tools = copilot.PosTools(DEV, tempfile.mkdtemp(), lambda q: False)
+        answer = reply.finish("باريس هي عاصمة فرنسا وعدد سكانها 2,100,000.", "سؤال عام", tools)
+        self.assertIn("أنا مساعد رزق", answer)
+
+    def test_how_to_questions_about_the_app_are_answered_from_the_app(self):
+        self.assertIn("أضف موظف", reply.app_help("كيف اضيف موظف جديد؟"))
+        self.assertIn("استيراد", reply.app_help("كيف اضيف صنف جديد"))
+        self.assertIsNone(reply.app_help("اضيف موظف اسمه احمد"))       # an instruction, not a how-to

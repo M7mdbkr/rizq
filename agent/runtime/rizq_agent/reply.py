@@ -185,7 +185,7 @@ def fallback(question: str, outputs) -> str:
             "Try asking another way, for example about sales, VAT or stock.")
 
 
-_GREETING = re.compile(r"^\s*(هلا|هلا والله|اهلا|أهلا|مرحبا|مرحبًا|السلام عليكم|سلام|صباح الخير|مساء الخير|hi|hello|hey|good (morning|evening))"
+_GREETING = re.compile(r"^\s*(الو|ألو|هلا|هلا والله|اهلا|أهلا|مرحبا|مرحبًا|السلام عليكم|سلام|صباح الخير|مساء الخير|hi|hello|hey|good (morning|evening))"
                        r"[\s!.,،؟?]*(كيف حالك|كيفك|شلونك|how are you)?[\s!.,،؟?]*$", re.I)
 _HOW = re.compile(r"^\s*(كيف حالك|كيفك|شلونك|وش اخبارك|how are you)[\s!.,،؟?]*$", re.I)
 _THANKS = re.compile(r"^\s*(شكرا|شكرًا|مشكور|يعطيك العافية|تسلم|thanks|thank you)[\s!.,،؟?]*$", re.I)
@@ -220,10 +220,50 @@ def step_budget(question: str) -> str:
     return "I stopped after too many steps (step budget reached) instead of looping. Ask me again more specifically."
 
 
+def out_of_scope(question: str) -> str:
+    if language(question) == "en":
+        return "I only help with your restaurant in Rizq: sales, stock, staff, discounts and VAT. What would you like to know?"
+    return "أنا مساعد رزق وأساعدك بس في مطعمك: المبيعات والمخزون والموظفين والخصومات والضريبة. وش تبي تعرف؟"
+
+
+_HELP = [
+    (r"(اضيف|أضيف|اضافة|إضافة|add).{0,12}(صنف|منتج|item|product)",
+     "من المخزون اضغط «إضافة صنف»، أو من المساعد اضغط «استيراد Excel» لإضافة أصناف كثيرة مرة وحدة."),
+    (r"(اضيف|أضيف|اضافة|إضافة|add).{0,12}(موظف|كاشير|يوزر|مستخدم|staff|user)",
+     "من المساعد اضغط «أضف موظف»، اكتب الاسم ورقم سري من 8 أرقام، ثم اضغط «تنفيذ»."),
+    (r"(خصم|كوبون|discount)",
+     "من المساعد اضغط «سوّ خصم»، اكتب اسم الكود والنسبة، ثم اضغط «تنفيذ»."),
+    (r"(تيليجرام|تليجرام|telegram)",
+     "من الإعدادات ← تيليجرام: حط توكن البوت واضغط «اختبار»، أرسل الرمز اللي يطلع لك للبوت، ثم اضغط «اختبار» مرة ثانية."),
+    (r"(جهاز الدفع|جهاز الشبكة|مدى|terminal|payment device)",
+     "من الإعدادات ← جهاز الدفع: اختر نوع الجهاز، واكتب عنوان IP والمنفذ إذا كان على الشبكة، ثم اضغط «اختبار الاتصال وحفظ»."),
+    (r"(استيراد|اكسل|إكسل|excel|csv|import)",
+     "من المساعد اضغط «استيراد Excel»، اختر الملف (أعمدة: اسم الصنف، السعر، والكمية إذا تبي)، راجع العدد ثم اضغط «تنفيذ»."),
+    (r"(تصدير|export|نسخة احتياطية|backup)",
+     "من الإعدادات: «تصدير» يعطيك ملف فيه كل البيانات، و«النسخة الاحتياطية» تحفظ قاعدة البيانات كاملة."),
+]
+
+
+def app_help(message: str) -> str | None:
+    """'How do I ...' questions about the app, answered from the app itself."""
+    if not re.search(r"كيف|طريقة|وين|how (do|can|to)|where", message, re.I):
+        return None
+    for pattern, answer in _HELP:
+        if re.search(pattern, message, re.I):
+            return answer
+    return None
+
+
 def finish(raw: str, question: str, tools=None, on_event=None) -> str:
     """Clean the model's final text; return it, or a safe fallback if it fails a check."""
     outputs = getattr(tools, "outputs", None) or []
     text = clean(raw)
+    # Only about the app: a model answer that never looked at the restaurant's data is
+    # general knowledge, so it is replaced. Small talk is answered before the model.
+    if tools is not None and not outputs and text.strip():
+        if on_event:
+            on_event("  ⚠ reply discarded: no app data used")
+        return out_of_scope(question)
     issues = problems(text, question, outputs)
     if not issues:
         return text

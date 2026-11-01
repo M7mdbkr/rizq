@@ -44,6 +44,8 @@ def period(days) -> str:
 def _sales(v: dict) -> str:
     when = period(v.get("days"))
     head = f"مبيعات {when}" if when else "المبيعات"
+    if not v.get("orders"):
+        return f"ما فيه مبيعات {when or 'في هذه الفترة'} لحد الحين." if when == "اليوم" else f"ما فيه مبيعات {when or 'في هذه الفترة'}."
     line = f"{head}: {money(v.get('sales'))} من {count(v.get('orders'))} طلب"
     if v.get("vat") is not None:
         line += f"، منها {money(v['vat'])} ضريبة"

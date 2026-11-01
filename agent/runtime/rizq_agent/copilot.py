@@ -53,7 +53,9 @@ You can act on the real POS database ONLY through your tools. Rules:
   or any other language.
 - Answer only what was asked, in plain short sentences, warm and natural like a helpful person (for example
   "أبشر، مبيعاتك اليوم ..."). No emojis, no markdown symbols, no tags, no JSON.
-- Every number you say must come from a tool result in this conversation. Do not compute new totals yourself."""
+- Every number you say must come from a tool result in this conversation. Do not compute new totals yourself.
+- You only help with this restaurant and the Rizq app. For anything else (general knowledge, code, translation,
+  news), say in one short sentence that you only help with the restaurant. Do not answer it."""
 
 TOOLS = [
     {"name": "scan_pos", "description": "Check every business rule on the POS database (totals, VAT, stock, customers, duplicates, payment methods, timestamps). Returns findings with handling auto|escalate.",
@@ -179,10 +181,12 @@ class PosTools:
 
     def t_sales_summary(self, days: int = 7) -> dict:
         days = max(1, min(int(days), 60))
+        # Same "today" as the skills: the real day on the live server, the newest order in evaluations.
+        anchor = "date('now', ?)" if skills.CLOCK == "real" else "(SELECT date(MAX(created_at), ?) FROM orders)"
         rows = self.db.execute("""
             SELECT date(created_at) d, COUNT(*) orders, ROUND(SUM(final_total),2) sales, ROUND(SUM(vat_amount),2) vat,
                    ROUND(SUM(discount_amount),2) discounts
-            FROM orders WHERE status='completed' AND date(created_at) > (SELECT date(MAX(created_at), ?) FROM orders)
+            FROM orders WHERE status='completed' AND date(created_at) > """ + anchor + """
             GROUP BY d ORDER BY d""", (f"-{days} days",)).fetchall()
         # The method's display name comes with its id: given only "merzool" the model
         # invented a spelling ("ميرزول") instead of the owner's "مرسول".
@@ -192,7 +196,7 @@ class PosTools:
         except sqlite3.Error:
             pass
         pay = [dict(r) for r in self.db.execute("""SELECT payment_method, COUNT(*) n, ROUND(SUM(final_total),2) total FROM orders
-            WHERE status='completed' AND date(created_at) > (SELECT date(MAX(created_at), ?) FROM orders) GROUP BY 1""",
+            WHERE status='completed' AND date(created_at) > """ + anchor + """ GROUP BY 1""",
                               (f"-{days} days",)).fetchall()]
         for r in pay:
             r["name"], r["kind"] = names.get(r["payment_method"], (r["payment_method"], "unknown"))
@@ -406,7 +410,7 @@ def refusal_text(verdict: dict, question: str) -> str:
               "asks for secrets (PINs, passwords, tokens)": "الطلب يطلب أسرار (أرقام سرية أو كلمات مرور أو توكن)",
               "destructive request: the agent never deletes data": "حذف بيانات، وأنا ما أحذف أي بيانات أبدًا",
               "asks to overwrite money or prices with a value": "تعديل مبالغ أو أسعار مباشرة، وهذا قرار لصاحب المطعم من داخل رزق",
-              "outside the restaurant's data": "خارج بيانات المطعم",
+              "outside the restaurant's data": "خارج بيانات المطعم. أنا مساعد رزق وأجاوب بس عن مطعمك: المبيعات والمخزون والموظفين والخصومات والضريبة",
               "not understood / outside scope": "ما فهمت الطلب أو هو خارج نطاقي"}
     if ar:
         return "ما أقدر أنفّذ هذا الطلب: " + why_ar.get(verdict["why"], verdict["why"])

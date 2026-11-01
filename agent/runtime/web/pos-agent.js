@@ -139,6 +139,13 @@
   return tidy(result.answer)||'لم يرد النموذج. حاول مرة أخرى.';
  };
 
+ /* Owner-only workflows: day close, payment reconciliation, stock alert, daily report, zakat. */
+ window.rizqAgentWorkflow=async (name,params)=>{
+  await ensureSession();
+  const sqlite_base64=await exportDatabase();
+  return api('/api/workflows/run',{token,name,params:params||{},sqlite_base64,conversation});
+ };
+
  /* Owner-only: the agent's own audit trail of allowed and denied tool calls. */
  window.rizqAgentAudit=async (limit=50)=>{
   await ensureSession();
@@ -236,7 +243,7 @@
  const option=(text,onclick)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.className=goldBtn;b.style.textAlign='right';b.style.padding='10px';b.onclick=onclick;return b};
  const alertIn=(box,msg)=>{let p=box.querySelector('.rizq-err');if(!p){p=document.createElement('p');p.className='rizq-err';p.style.color='#f87171';box.append(p)}p.textContent=msg};
  const send=text=>{if(window.rizqAssistantSend)window.rizqAssistantSend(text)};
- const propose=(text,rows,summary,run)=>window.rizqAssistantPropose&&window.rizqAssistantPropose(text,rows,{summary,run});
+ const propose=(text,rows,summary,run)=>window.rizqAssistantPropose&&window.rizqAssistantPropose(text,rows,run?{summary,run}:undefined);
  const QUICK=[
   ['كم اليوم؟',()=>send('كم مبيعات اليوم'),false],
   ['وش عندي؟',()=>screen('وش تبي تعرف؟',(b,d)=>[['المخزون الناقص','المخزون الناقص'],['قيمة المخزون','كم قيمة المخزون'],['أكثر صنف ينباع','وش أكثر صنف ينباع'],['مبيعات آخر 7 أيام','كم المبيعات آخر 7 أيام'],['الضريبة هذا الشهر','كم الضريبة هذا الشهر']]
@@ -260,6 +267,16 @@
        if(r.items.length)b.append(option('جهّز الاستيراد للحفظ',()=>{d.close();
         propose(`سأضيف ${r.items.length} صنف من «${f.name}». الأصناف الموجودة من قبل ما راح تتغير.`,r.items.slice(0,5).map(it=>({label:it.name,value:`${it.price} ر.س · كمية ${it.stock}`})),'حفظ الأصناف في قاعدة البيانات',()=>window.rizqPos.importProducts(r.items))}))
       }catch(e){alertIn(b,e.message)}};
+    }),true],
+  ['سير العمل',()=>screen('سير العمل',(b,d)=>{
+     const flows=[['day_close','إقفال اليوم: المبيعات والربح والمخزون وفحص البيانات'],['reconcile','مطابقة المدفوعات: طرق الدفع اليوم والطلبات اللي تحتاج مراجعة'],
+      ['low_stock','تنبيه المخزون: الأصناف الناقصة'],['daily_report','تقرير اليوم: ملخص قصير'],['zakat','تذكير الزكاة']];
+     for(const[id,label]of flows)b.append(option(label,async()=>{
+      const params={};
+      d.close();
+      try{const r=await window.rizqAgentWorkflow(id,params);propose(r.title+'\n'+r.report,null,null,null)}
+      catch(e){propose('تعذر تشغيل سير العمل: '+e.message,null,null,null)}
+     }));
     }),true],
   ['المحادثات',()=>showConversations(),false],
  ];

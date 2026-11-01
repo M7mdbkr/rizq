@@ -16,8 +16,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from .reply import language as reply_lang, smalltalk as reply_smalltalk
-from . import code_agent, confidence, copilot, export, fill, importer, memory, models, payments, permissions, rizq, schedule, security, skills, triage, zatca
+from .reply import app_help as reply_help, language as reply_lang, smalltalk as reply_smalltalk
+from . import code_agent, confidence, copilot, export, fill, importer, memory, models, payments, workflows, permissions, rizq, schedule, security, skills, triage, zatca
 
 ROOT = pathlib.Path(os.environ.get("RIZQ_ASSET_RUNTIME", str(pathlib.Path(__file__).resolve().parents[1])))
 WEB = ROOT / "web"
@@ -589,6 +589,29 @@ class Handler(BaseHTTPRequestHandler):
                 conv = str(body.get("conversation") or "")[:64] or None
                 self.send_json({"messages": memory.history(actor["user_id"], conv)})
                 return
+            if path == "/api/workflows/run":
+                actor = self.actor(body, require_owner=True)
+                self.guard("chat")
+                raw = base64.b64decode(body.get("sqlite_base64", ""), validate=True)
+                if not raw or len(raw) > MAX_BODY:
+                    raise ValueError("قاعدة البيانات فارغة أو أكبر من الحد المسموح")
+                fd, filename = tempfile.mkstemp(prefix="rizq-flow-", suffix=".sqlite")
+                try:
+                    with os.fdopen(fd, "wb") as fh:
+                        fh.write(raw)
+                    validate_database(pathlib.Path(filename))
+                    tools = copilot.PosTools(filename, str(RESULTS), confirm=lambda _: False, actor=actor)
+                finally:
+                    pathlib.Path(filename).unlink(missing_ok=True)
+                try:
+                    result = workflows.run(str(body.get("name", "")), tools, body.get("params") or {})
+                finally:
+                    tools.db.close()
+                conv = str(body.get("conversation") or "")[:64] or None
+                if conv and all(c.isalnum() or c in "-_" for c in conv):
+                    memory.append_exchange(actor["user_id"], result["title"], result["report"], conv)
+                self.send_json(result)
+                return
             if path == "/api/import/products":
                 actor = self.actor(body, require_owner=True)
                 self.guard("chat")
@@ -706,7 +729,7 @@ class Handler(BaseHTTPRequestHandler):
                 # question and garbled figures. So the model is used only where the
                 # rules genuinely run out -- which is decision D6/D13, not a shortcut.
                 # RIZQ_FORCE_MODEL=1 overrides, for comparing the two paths.
-                small = reply_smalltalk(message)
+                small = reply_smalltalk(message) or reply_help(message)
                 if small:
                     memory.append_exchange(user_id, message, small, conv)
                     self.send_json({"session": str(body.get("session", "")), "answer": small, "provider": "rules",
@@ -862,6 +885,8 @@ def local_ip() -> str | None:
 def main(port: int = 8000, host: str | None = None):
     load_dotenv()
     load_ai_settings()
+    # The live app answers about the real today, matching the dashboard.
+    skills.CLOCK = os.environ.get("RIZQ_CLOCK", "real")
     # Default stays loopback. Binding to every interface is opt-in, because it puts
     # the till on the shop's network: that is the point for an iPad, but it should
     # never happen by accident.

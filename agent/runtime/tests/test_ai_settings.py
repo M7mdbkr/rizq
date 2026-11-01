@@ -200,7 +200,7 @@ class AISettingsTests(unittest.TestCase):
         web.configure_ai("auto", "", "")
         handler = web.Handler.__new__(web.Handler)
         handler.path = "/api/chat/local"
-        handler.read_json = lambda: {"message": "الو", "sqlite_base64": base64.b64encode(web.DEFAULT_DB.read_bytes()).decode()}
+        handler.read_json = lambda: {"message": "ساعدني أفهم لوحة التحكم", "sqlite_base64": base64.b64encode(web.DEFAULT_DB.read_bytes()).decode()}
         handler.guard = lambda _: None
         handler.actor = lambda *args, **kwargs: {"user_id": "owner", "role": "owner", "name": "Owner"}
         handler.send_json = mock.Mock()

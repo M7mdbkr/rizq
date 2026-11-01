@@ -306,6 +306,14 @@ Telegram pairs the owner's chat with a one-time code, and the daily report is se
 (`tests/test_pos_bundle.py`). The bot runs while a POS window is open; live use is not verified.
 AI settings are saved on this device only (file mode 600, outside git).
 
+### Workflows
+
+Five read-only workflows run on the same checked tools as the chat and are written to the audit log:
+day close, payment reconciliation, stock alert, daily report and zakat reminder. Run them from the
+assistant's "سير العمل" button, `/api/workflows/run`, or
+`python3 -m rizq_agent workflow day_close fixtures/rizq_dev.sqlite --every 60` (`tests/test_workflows.py`).
+The live app's "today" is the calendar day, the same as the dashboard; a day without sales says so.
+
 ## Testing
 
 ```bash

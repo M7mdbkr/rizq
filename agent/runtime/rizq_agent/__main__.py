@@ -247,12 +247,26 @@ def main() -> None:
     q = sub.add_parser("requests"); q.add_argument("--split", default="dev", choices=["dev", "held_out"])
     q.add_argument("--llm", default="rules", choices=["rules", "ollama", "claude", "openai", "compatible", "auto"]); q.add_argument("--model", default=None)
     i = sub.add_parser("ai"); i.add_argument("--n", type=int, default=20); i.add_argument("--split", default="dev")
+    f = sub.add_parser("workflow", help="run a workflow: day_close, reconcile, low_stock, daily_report, zakat")
+    f.add_argument("name"); f.add_argument("db"); f.add_argument("--every", type=float, default=0, help="repeat every N minutes")
     w = sub.add_parser("web", help="run the full-stack Rizq POS and AI dashboard locally")
     w.add_argument("--port", type=int, default=8000)
     w.add_argument("--host", default=None, help="bind address (default 127.0.0.1)")
     w.add_argument("--lan", action="store_true",
                    help="serve to phones and tablets on this Wi-Fi (binds 0.0.0.0)")
     a = p.parse_args()
+    if a.cmd == "workflow":
+        import tempfile
+        import time as _time
+        from . import copilot, skills, workflows
+        skills.CLOCK = os.environ.get("RIZQ_CLOCK", "real")
+        while True:
+            tools = copilot.PosTools(a.db, tempfile.mkdtemp(), lambda q: False)
+            result = workflows.run(a.name, tools)
+            print(f"== {result['title']} ({'ok' if result['ok'] else 'check'})\n{result['report']}\n", flush=True)
+            if not a.every:
+                return
+            _time.sleep(a.every * 60)
     if a.cmd == "web":
         from .web import main as serve_web
         serve_web(a.port, "0.0.0.0" if a.lan else a.host)
